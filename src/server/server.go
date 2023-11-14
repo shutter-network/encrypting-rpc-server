@@ -13,7 +13,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/pkg/errors"
-	"github.com/rs/zerolog/log"
 
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 
@@ -51,11 +50,16 @@ func (p *JSONRPCProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
-	log.Info().Str("method", rpcreq.Method).Msg("dispatching")
+	selectedHandler := p.SelectHandler(rpcreq.Method)
+	if selectedHandler == p.processor {
+		Logger.Info().Str("method", rpcreq.Method).Msg("dispatching to processor")
+	} else {
+		Logger.Info().Str("method", rpcreq.Method).Msg("dispatching to backend")
+	}
 
 	// make the body available again before letting reverse proxy handle the rest
 	r.Body = io.NopCloser(bytes.NewBuffer(body))
-	p.SelectHandler(rpcreq.Method).ServeHTTP(w, r)
+	selectedHandler.ServeHTTP(w, r)
 }
 
 type Config struct {
