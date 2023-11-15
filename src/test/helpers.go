@@ -1,4 +1,4 @@
-package server_test
+package test
 
 import (
 	"bytes"
@@ -100,9 +100,14 @@ type DeployData struct {
 	Commit       string            `json:"commit"`
 }
 
-func getContractData() (map[string]common.Address, error) {
+func GetContractData() (map[string]common.Address, error) {
 	contractInfo := make(map[string]common.Address)
-	jsonFile, err := os.Open("../../gnosh-contracts/broadcast/deploy.s.sol/1337/run-latest.json")
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	deployDataPath := wd + "/gnosh-contracts/broadcast/deploy.s.sol/1337/run-latest.json"
+	jsonFile, err := os.Open(deployDataPath)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +161,7 @@ func setupGanacheServer() *os.Process {
 func setupProcessor() rpc.Processor {
 	ctx := context.Background()
 
-	contractInfo, err := getContractData()
+	contractInfo, err := GetContractData()
 	if err != nil {
 		log.Fatal().Err(err).Msg("can not get contract info")
 	}
@@ -222,7 +227,7 @@ func setupProcessor() rpc.Processor {
 	return processor
 }
 
-func captureOutput(f func() error) (error, string) {
+func CaptureOutput(f func() error) (error, string) {
 	var buf bytes.Buffer
 	oldLogger := server.Logger
 	newLogger := server.Logger.Output(&buf)
@@ -232,12 +237,16 @@ func captureOutput(f func() error) (error, string) {
 	return err, buf.String()
 }
 
-func setupServer() *os.Process {
+func SetupServer() *os.Process {
 	ctx := context.Background()
 	proc := setupGanacheServer()
 	cmd := exec.Command("make", "deploy")
-	cmd.Dir = "../"
-	err := cmd.Run()
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Fatal().Err(err).Msg("can not get working dir")
+	}
+	cmd.Dir = wd + "/src"
+	err = cmd.Run()
 	if err != nil {
 		log.Fatal().Err(err).Msg("can not deploy")
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/shutter-network/encrypting-rpc-server/test"
 	"math"
 	"math/big"
 	"strings"
@@ -20,25 +21,25 @@ import (
 	txtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/rs/zerolog/log"
 	"github.com/shutter-network/encrypting-rpc-server/contracts"
-	rpc "github.com/shutter-network/encrypting-rpc-server/rpc"
+	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 )
 
 func backendTest(t *testing.T) {
 	ctx := context.Background()
-	client, err := ethclient.Dial(ServerURL)
+	client, err := ethclient.Dial(test.ServerURL)
 	if err != nil {
 		t.Fail()
 	}
-	err, log := captureOutput(func() error {
+	err, logs := test.CaptureOutput(func() error {
 		_, err := client.ChainID(ctx)
 		return err
 	})
 	if err != nil {
 		t.Fail()
 	}
-	if !strings.Contains(log, "dispatching to backend") {
+	if !strings.Contains(logs, "dispatching to backend") {
 		t.Fail()
 	}
 }
@@ -46,11 +47,11 @@ func backendTest(t *testing.T) {
 func processorTest(t *testing.T) {
 	slot := uint64(0)
 	rpc.ComputeSlot = func(blockTimestamp uint64) (*uint64, error) { return &slot, nil }
-	rpc.EpochComputer = func(epochIDBytes []byte) *shcrypto.EpochID { return TestEpochID }
+	rpc.EpochComputer = func(epochIDBytes []byte) *shcrypto.EpochID { return test.TestEpochID }
 	ctx := context.Background()
-	fromAddress := common.HexToAddress(TxFromAddress)
-	toAddress := common.HexToAddress(TxToAddress)
-	client, err := ethclient.Dial(ServerURL)
+	fromAddress := common.HexToAddress(test.TxFromAddress)
+	toAddress := common.HexToAddress(test.TxToAddress)
+	client, err := ethclient.Dial(test.ServerURL)
 	if err != nil {
 		t.Fail()
 	}
@@ -59,12 +60,12 @@ func processorTest(t *testing.T) {
 		log.Fatal().Err(err).Msg("can not get chain id")
 	}
 
-	privateKey, err := crypto.HexToECDSA(TxPrivKey)
+	privateKey, err := crypto.HexToECDSA(test.TxPrivKey)
 	if err != nil {
 		t.Fail()
 	}
 
-	contractInfo, err := getContractData()
+	contractInfo, err := test.GetContractData()
 	if err != nil {
 		log.Fatal().Err(err).Msg("can not get contract info")
 	}
@@ -85,7 +86,7 @@ func processorTest(t *testing.T) {
 	if err != nil {
 		t.Fail()
 	}
-	err, log := captureOutput(func() error {
+	err, logs := test.CaptureOutput(func() error {
 		tx := txtypes.NewTransaction(nonce, toAddress, amount, gasLimit, gasPrice, nil)
 		signer := types.NewEIP155Signer(chainId)
 		signedTx, err := types.SignTx(tx, signer, privateKey)
@@ -116,13 +117,13 @@ func processorTest(t *testing.T) {
 				if err != nil {
 					log.Fatal().Err(err).Msg("can not unmarshall encrypted tx")
 				}
-				decryptKey := TestKeygen.EpochSecretKey(identityPreimage)
+				decryptKey := test.TestKeygen.EpochSecretKey(identityPreimage)
 				fmt.Println("decrypt", decryptKey.Marshal())
-				decrypted_tx, err := message.Decrypt(decryptKey)
+				decryptedTx, err := message.Decrypt(decryptKey)
 				if err != nil {
 					log.Fatal().Err(err).Msg("can not decrypt encrypted tx")
 				}
-				if hexutil.Encode(decrypted_tx) != rawTx {
+				if hexutil.Encode(decryptedTx) != rawTx {
 					t.Fail()
 				}
 				break
@@ -134,19 +135,19 @@ func processorTest(t *testing.T) {
 		}
 		return err
 	})
-	fmt.Println(log)
+	fmt.Println(logs)
 
 	if err != nil {
 		fmt.Println(err.Error())
 		t.Fail()
 	}
-	if !strings.Contains(log, "dispatching to processor") {
+	if !strings.Contains(logs, "dispatching to processor") {
 		t.Fail()
 	}
 }
 
 func TestServer(t *testing.T) {
-	proc := setupServer()
+	proc := test.SetupServer()
 
 	// t.Run("backend test", backendTest)
 	t.Run("processor test", processorTest)
