@@ -110,8 +110,9 @@ func processorTest(t *testing.T) {
 		for {
 			if it.Event != nil {
 				encryptedTx := it.Event.EncryptedTransaction
-				identity := rpc.ComputeIdentity(it.Event.IdentityPrefix[:], it.Event.Sender)
-				identityPreimage := identitypreimage.IdentityPreimage(identity.Marshal())
+				preim := it.Event.IdentityPrefix[:]
+				preim = append(preim, it.Event.Sender.Bytes()...)
+				identityPreimage := identitypreimage.IdentityPreimage(preim)
 				message := shcrypto.EncryptedMessage{}
 				err := message.Unmarshal(encryptedTx)
 				if err != nil {
