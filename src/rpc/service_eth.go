@@ -12,6 +12,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/rs/zerolog/log"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 )
 
@@ -29,13 +31,12 @@ func (r *EncodingError) Error() string {
 	return fmt.Sprintf("status %d: err %v", r.StatusCode, r.Err)
 }
 
-var EpochComputer = shcrypto.ComputeEpochID
-
 func ComputeIdentity(prefix []byte, sender common.Address) *shcrypto.EpochID {
 	var combined []byte
 	copy(combined, prefix)
 	combined = append(combined, sender.Bytes()...)
-	return EpochComputer(combined)
+	log.Info().Str("identity-preimage", hexutil.Encode(combined)).Msg("compute identity")
+	return shcrypto.ComputeEpochID(combined)
 }
 
 func ComputeSlotFunc(blockTimestamp uint64) (*uint64, error) {
@@ -140,10 +141,6 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
 
-	identity := ComputeIdentity(identityPrefix[:], fromAddress)
-
-	encryptedTx := shcrypto.Encrypt(b, eonKey, identity, sigma)
-
 	chainId, err := service.processor.Client.ChainID(ctx)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
@@ -153,6 +150,28 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
+
+	combined := make([]byte, len(identityPrefix))
+	copy(combined[:], identityPrefix[:])
+	// FIXME: the sender address was the address of the cleartext transaction!
+	preimBytes := append(combined, newSigner.From.Bytes()...)
+	identityPreimage := identitypreimage.IdentityPreimage(preimBytes)
+	identity := shcrypto.ComputeEpochID(identityPreimage.Bytes())
+	log.Info().
+		Str("combined", hexutil.Encode(combined)).
+		Str("preimBytes", hexutil.Encode(preimBytes)).
+		Str("identityPreimage-bytea", hexutil.Encode(identityPreimage.Bytes())).
+		Str("identity", hexutil.Encode(identity.Marshal())).
+		Str("signer-addr", newSigner.From.Hex()).
+		Msg("identityPreimage encrypt")
+
+	log.Info().
+		Str("msg", hexutil.Encode(b)).
+		Str("identiy", hexutil.Encode(identity.Marshal())).
+		Str("eonKey", hexutil.Encode(eonKey.Marshal())).
+		Str("sigma", hexutil.Encode(sigma[:])).
+		Msg("encrypt message")
+	encryptedTx := shcrypto.Encrypt(b, eonKey, identity, sigma)
 
 	opts := bind.TransactOpts{
 		From:   *service.processor.SigningAddress,
@@ -178,6 +197,13 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	// FIXME: shouldn't this be the gas estimation of the cleartext transaction?
 	opts.Value = submitTx.Cost()
 
+	log.Info().
+		Uint64("eon", eon).
+		Str("identiy-prefix", hexutil.Encode(identityPrefix[:])).
+		Str("identity-preimage", hexutil.Encode(identityPreimage.Bytes())).
+		Str("eon-pub-key", hexutil.Encode(eonKey.Marshal())).
+		Str("encrypted-tx", hexutil.Encode(encryptedTx.Marshal())).
+		Msg("submit encrypted tx")
 	submitTx, err = service.processor.SequencerContract.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32603, Err: err}

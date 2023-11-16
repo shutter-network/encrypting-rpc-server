@@ -12,6 +12,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shutter-network/encrypting-rpc-server/test"
+	"gotest.tools/assert"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -84,7 +85,7 @@ func processorTest(t *testing.T) {
 	amount := big.NewInt(int64(math.Pow(10, 18)))
 	gasLimit := uint64(21000)
 
-	gasPrice, err := client.SuggestGasPrice(context.Background())
+	gasPrice, err := client.SuggestGasPrice(ctx)
 	if err != nil {
 		t.Fail()
 	}
@@ -121,14 +122,20 @@ func processorTest(t *testing.T) {
 					log.Fatal().Err(err).Msg("can not unmarshall encrypted tx")
 				}
 				decryptKey := test.TestKeygen.EpochSecretKey(identityPreimage)
-				fmt.Println("decrypt", decryptKey.Marshal())
+				pubKey := test.TestKeygen.EonPublicKey(identityPreimage)
+				log.Info().
+					Str("identiy-prefix", hexutil.Encode(it.Event.IdentityPrefix[:])).
+					Str("identiy-preimage", hexutil.Encode(identityPreimage.Bytes())).
+					Str("eon-pub-key", hexutil.Encode(pubKey.Marshal())).
+					Str("encrypted-tx", hexutil.Encode(encryptedTx)).
+					Str("decryption-key", hexutil.Encode(decryptKey.Marshal())).
+					Msg("decrypt transaction")
 				decryptedTx, err := message.Decrypt(decryptKey)
 				if err != nil {
 					log.Fatal().Err(err).Msg("can not decrypt encrypted tx")
 				}
-				if hexutil.Encode(decryptedTx) != rawTx {
-					t.Fail()
-				}
+				decrytedHex := hexutil.Encode(decryptedTx)
+				assert.Equal(t, decrytedHex, rawTx)
 				break
 			}
 			ok := it.Next()
@@ -140,10 +147,7 @@ func processorTest(t *testing.T) {
 	})
 	fmt.Println(logs)
 
-	if err != nil {
-		fmt.Println(err.Error())
-		t.Fail()
-	}
+	assert.NilError(t, err)
 	if !strings.Contains(logs, "dispatching to processor") {
 		t.Fail()
 	}
