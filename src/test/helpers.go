@@ -19,16 +19,20 @@ import (
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/server"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
-	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
 	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 	medleyKeygen "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/testkeygen"
-
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 )
 
+func init() {
+	TestEonKey = TestKeygen.EonPublicKey([]byte{})
+}
+
 var (
-	TestKeygen      *medleyKeygen.TestKeyGenerator
-	TestEpochID     = shcrypto.ComputeEpochID([]byte("test"))
+	TestKeygen *medleyKeygen.TestKeyGenerator
+	TestEonKey *shcrypto.EonPublicKey
+	// TestEpochID          = shcrypto.ComputeEpochID([]byte("test"))
+	// TestIdentityPreimage = []byte("test")
 	DeployerKey     = "a26ebb1df46424945009db72c7a7ba034027450784b93f34000169b35fd3adaa"
 	DeployerAddress = "0xA868bC7c1AF08B8831795FAC946025557369F69C"
 	BackendURL      = "http://localhost:8545"
@@ -184,7 +188,6 @@ func setupProcessor() rpc.Processor {
 	if err != nil {
 		log.Fatal().Err(err).Msg("can not get KeyBrodcastContract")
 	}
-	identityPreimage := identitypreimage.IdentityPreimage(TestEpochID.Marshal())
 
 	chainId, err := client.ChainID(ctx)
 	if err != nil {
@@ -192,9 +195,8 @@ func setupProcessor() rpc.Processor {
 	}
 
 	TestKeygen = medleyKeygen.NewTestKeyGenerator(&testing.T{}, 3, 2, true)
-	eonKey := TestKeygen.EonPublicKey(identityPreimage)
 
-	b, err := eonKey.GobEncode()
+	b, err := TestEonKey.GobEncode()
 	if err != nil {
 		log.Fatal().Err(err).Msg("Test")
 	}

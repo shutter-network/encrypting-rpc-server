@@ -122,7 +122,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
 
-	eonKey := shcrypto.EonPublicKey{}
+	eonKey := &shcrypto.EonPublicKey{}
 	if err := eonKey.Unmarshal(eonKeyBytes); err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
@@ -135,9 +135,10 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
+
 	identity := ComputeIdentity(identityPrefix[:], fromAddress)
 
-	encryptedTx := shcrypto.Encrypt(b, &eonKey, identity, sigma)
+	encryptedTx := shcrypto.Encrypt(b, eonKey, identity, sigma)
 
 	chainId, err := service.processor.Client.ChainID(ctx)
 	if err != nil {

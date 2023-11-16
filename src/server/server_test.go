@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/shutter-network/encrypting-rpc-server/test"
 	"math"
 	"math/big"
 	"strings"
 	"testing"
+
+	"github.com/shutter-network/encrypting-rpc-server/test"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -47,7 +48,6 @@ func backendTest(t *testing.T) {
 func processorTest(t *testing.T) {
 	slot := uint64(0)
 	rpc.ComputeSlot = func(blockTimestamp uint64) (*uint64, error) { return &slot, nil }
-	rpc.EpochComputer = func(epochIDBytes []byte) *shcrypto.EpochID { return test.TestEpochID }
 	ctx := context.Background()
 	fromAddress := common.HexToAddress(test.TxFromAddress)
 	toAddress := common.HexToAddress(test.TxToAddress)
@@ -113,7 +113,7 @@ func processorTest(t *testing.T) {
 				preim := it.Event.IdentityPrefix[:]
 				preim = append(preim, it.Event.Sender.Bytes()...)
 				identityPreimage := identitypreimage.IdentityPreimage(preim)
-				message := shcrypto.EncryptedMessage{}
+				message := &shcrypto.EncryptedMessage{}
 				err := message.Unmarshal(encryptedTx)
 				if err != nil {
 					log.Fatal().Err(err).Msg("can not unmarshall encrypted tx")
