@@ -25,14 +25,13 @@ import (
 )
 
 func init() {
-	TestEonKey = TestKeygen.EonPublicKey([]byte{})
+	TestKeygen = medleyKeygen.NewTestKeyGenerator(&testing.T{}, 3, 2, true)
+	TestEonKey = TestKeygen.EonPublicKey([]byte("test"))
 }
 
 var (
-	TestKeygen *medleyKeygen.TestKeyGenerator
-	TestEonKey *shcrypto.EonPublicKey
-	// TestEpochID          = shcrypto.ComputeEpochID([]byte("test"))
-	// TestIdentityPreimage = []byte("test")
+	TestKeygen      *medleyKeygen.TestKeyGenerator
+	TestEonKey      *shcrypto.EonPublicKey
 	DeployerKey     = "a26ebb1df46424945009db72c7a7ba034027450784b93f34000169b35fd3adaa"
 	DeployerAddress = "0xA868bC7c1AF08B8831795FAC946025557369F69C"
 	BackendURL      = "http://localhost:8545"
@@ -193,8 +192,6 @@ func setupProcessor() rpc.Processor {
 	if err != nil {
 		log.Fatal().Err(err).Msg("can not get chain id")
 	}
-
-	TestKeygen = medleyKeygen.NewTestKeyGenerator(&testing.T{}, 3, 2, true)
 
 	b, err := TestEonKey.GobEncode()
 	if err != nil {

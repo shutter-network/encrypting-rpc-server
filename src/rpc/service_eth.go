@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -32,8 +34,10 @@ func (r *EncodingError) Error() string {
 var EpochComputer = shcrypto.ComputeEpochID
 
 func ComputeIdentity(prefix []byte, sender common.Address) *shcrypto.EpochID {
-	bytes := append(prefix, sender.Bytes()...)
-	return EpochComputer(bytes)
+	var combined []byte
+	copy(combined, prefix)
+	combined = append(combined, sender.Bytes()...)
+	return EpochComputer(combined)
 }
 
 func ComputeSlotFunc(blockTimestamp uint64) (*uint64, error) {
@@ -112,6 +116,8 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("gas cost is higher")}
 	}
 
+	// FIXME: the 'KeyperSetChangeLookAhead' is named incorrectly at this point,
+	// since this particular name is used differently in normal shutter - this is slightly confusing.
 	eon, err := service.processor.KeyperSetManagerContract.GetKeyperSetIndexBySlot(nil, *slot+uint64(service.processor.KeyperSetChangeLookAhead))
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
@@ -171,6 +177,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	}
 
 	opts.NoSend = false
+	// FIXME: shouldn't this be the gas estimation of the cleartext transaction?
 	opts.Value = submitTx.Cost()
 
 	submitTx, err = service.processor.SequencerContract.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
