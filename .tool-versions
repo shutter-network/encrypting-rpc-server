@@ -1,0 +1,7 @@
+circleci 0.1.28811
+golang 1.21.3
+golangci-lint 1.55.2
+nodejs 18.17.0
+pre-commit 3.3.3
+protoc 22.3
+solidity 0.8.9

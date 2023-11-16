@@ -7,8 +7,16 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
+
+	"github.com/integralist/go-findroot/find"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
+	"gotest.tools/assert"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -27,9 +35,15 @@ import (
 func init() {
 	TestKeygen = medleyKeygen.NewTestKeyGenerator(&testing.T{}, 3, 2, true)
 	TestEonKey = TestKeygen.EonPublicKey([]byte("test"))
+	stat, err := find.Repo()
+	if err != nil {
+		log.Fatal().Err(err).Msg("can't find repository root path")
+	}
+	RootDir = stat.Path
 }
 
 var (
+	RootDir         string
 	TestKeygen      *medleyKeygen.TestKeyGenerator
 	TestEonKey      *shcrypto.EonPublicKey
 	DeployerKey     = "a26ebb1df46424945009db72c7a7ba034027450784b93f34000169b35fd3adaa"
@@ -105,11 +119,7 @@ type DeployData struct {
 
 func GetContractData() (map[string]common.Address, error) {
 	contractInfo := make(map[string]common.Address)
-	wd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	deployDataPath := wd + "/gnosh-contracts/broadcast/deploy.s.sol/1337/run-latest.json"
+	deployDataPath := path.Join(RootDir, "gnosh-contracts/broadcast/deploy.s.sol/1337/run-latest.json")
 	jsonFile, err := os.Open(deployDataPath)
 	if err != nil {
 		return nil, err
@@ -135,35 +145,67 @@ func GetContractData() (map[string]common.Address, error) {
 	return contractInfo, nil
 }
 
-func setupGanacheServer() *os.Process {
-	ctx := context.Background()
+func setupGanacheServer(t *testing.T, ctx context.Context) (*os.Process, error) {
+	t.Helper()
+
 	ganachePath, err := exec.Command("which", "ganache").Output()
-	if err != nil {
-		log.Fatal().Err(err).Msg("can not get ganache path")
-	}
-	args := []string{"-d", "-b", "5", "-t", "2021-12-08T20:55:40", "-v", "--wallet.mnemonic", "brownie"}
+	assert.NilError(t, err)
+	args := []string{"ganache", "-b", "5", "-t", "2021-12-08T20:55:40", "-v", "--wallet.mnemonic", "brownie"}
 	procAttr := new(os.ProcAttr)
 	procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
 	ganachePathAsString := strings.TrimRight(string(ganachePath), "\n")
-	proc, err := os.StartProcess(ganachePathAsString, args, procAttr)
-	if err != nil {
-		log.Fatal().Err(err).Msg("can not start ganache")
+	if ganachePathAsString == "" {
+		return nil, errors.New("can't find ganache path")
 	}
+	log.Info().Str("ganache-path", ganachePathAsString).Msg("found path")
+	proc, err := os.StartProcess(ganachePathAsString, args, procAttr)
+	t.Cleanup(
+		func() {
+			_ = proc.Signal(syscall.SIGINT)
+			_ = proc.Signal(syscall.SIGTERM)
+			t := time.NewTimer(3 * time.Second)
+			wait := make(chan error)
+			go func() {
+				_, err := proc.Wait()
+				wait <- err
+			}()
+			select {
+			case <-wait:
+				close(wait)
+				return
+			case <-t.C:
+				_ = proc.Kill()
+				return
+			}
+		},
+	)
+	assert.NilError(t, err)
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	var client *ethclient.Client
 	for {
-		client, _ := ethclient.Dial("http://localhost:8545")
-		_, err := client.ChainID(ctx)
-		if err != nil {
-			continue
-		} else {
-			break
+		select {
+		case <-ticker.C:
+			if client == nil {
+				client, err = ethclient.Dial("http://localhost:8545")
+				if err != nil {
+					log.Info().Msg("could not dial blockchain")
+					continue
+				}
+			}
+			_, err := client.ChainID(ctx)
+			if err != nil {
+				log.Info().Err(err).Msg("could not get chainid")
+				continue
+			}
+			return proc, nil
+		case <-ctx.Done():
+			return proc, ctx.Err()
 		}
 	}
-	return proc
 }
 
-func setupProcessor() rpc.Processor {
-	ctx := context.Background()
-
+func setupProcessor(ctx context.Context) rpc.Processor {
 	contractInfo, err := GetContractData()
 	if err != nil {
 		log.Fatal().Err(err).Msg("can not get contract info")
@@ -205,7 +247,10 @@ func setupProcessor() rpc.Processor {
 	if err != nil {
 		log.Fatal().Err(err).Msg("can not set eon key")
 	}
-	bind.WaitMined(ctx, client, tx)
+	_, err = bind.WaitMined(ctx, client, tx)
+	if err != nil {
+		log.Fatal().Err(err).Msg("could not mine transactions")
+	}
 
 	sequencerContract, err := contracts.NewSequencerContract(contractInfo["Sequencer"], client)
 	if err != nil {
@@ -236,32 +281,38 @@ func CaptureOutput(f func() error) (error, string) {
 	return err, buf.String()
 }
 
-func SetupServer() *os.Process {
-	ctx := context.Background()
-	proc := setupGanacheServer()
-	cmd := exec.Command("make", "deploy")
-	wd, err := os.Getwd()
+func SetupServer(t *testing.T, ctx context.Context) (*os.Process, error) {
+	t.Helper()
+
+	group, ctx := errgroup.WithContext(ctx)
+	proc, err := setupGanacheServer(t, ctx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("can not get working dir")
+		err = errors.Wrap(err, "failed to setup ganache blockchain")
+		return proc, err
 	}
-	cmd.Dir = wd + "/src"
+
+	cmd := exec.CommandContext(ctx, "make", "deploy")
+	cmd.Dir = path.Join(RootDir, "src/")
 	err = cmd.Run()
 	if err != nil {
-		log.Fatal().Err(err).Msg("can not deploy")
+		err = errors.Wrap(err, "failed to run deployment")
+		return proc, err
 	}
-	cmd.Wait()
 
-	processor := setupProcessor()
+	processor := setupProcessor(ctx)
 	backendUrl := &url.URL{}
 	err = backendUrl.UnmarshalText([]byte(processor.RPCUrl))
-	if err != nil {
-		log.Fatal().Err(err).Msg("can not parse rpcUrl")
-	}
+	assert.NilError(t, err)
+
 	config := server.Config{
 		BackendURL:        backendUrl,
 		HTTPListenAddress: processor.URL,
 	}
 	service := server.NewRPCService(processor, &config)
-	go medleyService.Run(ctx, service)
-	return proc
+	group.Go(
+		func() error {
+			return medleyService.Run(ctx, service)
+		},
+	)
+	return proc, nil
 }

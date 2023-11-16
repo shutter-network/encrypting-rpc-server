@@ -8,7 +8,9 @@ import (
 	"math/big"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/pkg/errors"
 	"github.com/shutter-network/encrypting-rpc-server/test"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -46,9 +48,9 @@ func backendTest(t *testing.T) {
 }
 
 func processorTest(t *testing.T) {
+	ctx := context.Background()
 	slot := uint64(0)
 	rpc.ComputeSlot = func(blockTimestamp uint64) (*uint64, error) { return &slot, nil }
-	ctx := context.Background()
 	fromAddress := common.HexToAddress(test.TxFromAddress)
 	toAddress := common.HexToAddress(test.TxToAddress)
 	client, err := ethclient.Dial(test.ServerURL)
@@ -148,11 +150,18 @@ func processorTest(t *testing.T) {
 }
 
 func TestServer(t *testing.T) {
-	proc := test.SetupServer()
+	ctx, cancelTimeout := context.WithTimeout(context.Background(), 60*time.Second)
+	t.Cleanup(
+		func() {
+			cancelTimeout()
+		},
+	)
+	_, err := test.SetupServer(t, ctx)
+	if err != nil {
+		err = errors.Wrap(err, "failed to setup server")
+		t.Fatal(err)
+	}
 
 	// t.Run("backend test", backendTest)
 	t.Run("processor test", processorTest)
-	t.Cleanup(func() {
-		proc.Kill()
-	})
 }

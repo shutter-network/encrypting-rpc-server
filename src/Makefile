@@ -20,7 +20,7 @@ abigen:
 	abigen --abi ../gnosh-contracts/out/KeyperSetManager.sol/KeyperSetManager.abi.json --pkg contracts --out contracts/KeyperSetManagerContract.go --type KeyperSetManagerContract
 
 deploy:
-	cd ../gnosh-contracts && BROADCASTER=0xA868bC7c1AF08B8831795FAC946025557369F69C PRIVATE_KEY=0xa26ebb1df46424945009db72c7a7ba034027450784b93f34000169b35fd3adaa forge script script/deploy.s.sol --rpc-url http://localhost:8545 --broadcast -vvvv
+	cd ../gnosh-contracts && ETHERSCAN_API_KEY=foobar BROADCASTER=0xA868bC7c1AF08B8831795FAC946025557369F69C PRIVATE_KEY=0xa26ebb1df46424945009db72c7a7ba034027450784b93f34000169b35fd3adaa forge script script/deploy.s.sol --rpc-url http://localhost:8545 --broadcast -vvvv
 
 clean:
 	rm -f ${EXECUTABLE}
