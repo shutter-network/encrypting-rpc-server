@@ -2,3 +2,4 @@
 [submodule "gnosh-contracts"]
 	path = gnosh-contracts
 	url = git@github.com:shutter-network/gnosh-contracts.git
+	branch = feat/tests
