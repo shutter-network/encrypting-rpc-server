@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	cryptorand "crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 )
@@ -29,12 +30,14 @@ func (r *EncodingError) Error() string {
 	return fmt.Sprintf("status %d: err %v", r.StatusCode, r.Err)
 }
 
+var EpochComputer = shcrypto.ComputeEpochID
+
 func ComputeIdentity(prefix []byte, sender common.Address) *shcrypto.EpochID {
-	bytes := append(prefix, sender.Bytes()...)
-	return shcrypto.ComputeEpochID(bytes)
+	imageBytes := append(prefix, sender.Bytes()...)
+	return EpochComputer(identitypreimage.IdentityPreimage(imageBytes).Bytes())
 }
 
-func ComputeSlot(blockTimestamp uint64) (*uint64, error) {
+func ComputeSlotFunc(blockTimestamp uint64) (*uint64, error) {
 	if blockTimestamp < uint64(GENESIS_TIME) {
 		return nil, errors.New("Slot computation error")
 	}
@@ -46,6 +49,8 @@ func ComputeSlot(blockTimestamp uint64) (*uint64, error) {
 
 	return &slot, nil
 }
+
+var ComputeSlot = ComputeSlotFunc
 
 type EthService struct {
 	processor Processor
@@ -60,17 +65,15 @@ func (s *EthService) Name() string {
 }
 
 func (service *EthService) SendTransaction(ctx context.Context, tx *txtypes.Transaction) (*common.Hash, error) {
-	rawSignature := new(bytes.Buffer)
-	err := tx.EncodeRLP(rawSignature)
-	if err != nil {
-		return nil, err
-	}
+	ts := txtypes.Transactions{tx}
+	buf := new(bytes.Buffer)
+	ts.EncodeIndex(0, buf)
+	rawTx := hexutil.Encode(buf.Bytes())
 
-	return service.SendRawTransaction(ctx, hex.EncodeToString(rawSignature.Bytes()))
+	return service.SendRawTransaction(ctx, rawTx)
 }
 
 func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*common.Hash, error) {
-
 	block, err := service.processor.Client.BlockByNumber(ctx, nil)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
@@ -79,8 +82,10 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
-
-	b, err := hex.DecodeString(s)
+	b, err := hexutil.Decode(s)
+	if err != nil {
+		return nil, &EncodingError{StatusCode: -32602, Err: err}
+	}
 	tx := new(txtypes.Transaction)
 	if err := tx.UnmarshalBinary(b); err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
@@ -96,7 +101,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	}
 
 	if accountNonce != tx.Nonce() {
-		return nil, &EncodingError{StatusCode: -32000, Err: err}
+		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("nonce is not correct")}
 	}
 
 	accountBalance, err := service.processor.Client.BalanceAt(ctx, fromAddress, nil)
@@ -105,7 +110,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	}
 
 	if accountBalance.Cmp(tx.Cost()) == -1 {
-		return nil, &EncodingError{StatusCode: -32000, Err: err}
+		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("gas cost is higher")}
 	}
 
 	eon, err := service.processor.KeyperSetManagerContract.GetKeyperSetIndexBySlot(nil, *slot+uint64(service.processor.KeyperSetChangeLookAhead))
@@ -118,7 +123,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
 
-	eonKey := shcrypto.EonPublicKey{}
+	eonKey := &shcrypto.EonPublicKey{}
 	if err := eonKey.Unmarshal(eonKeyBytes); err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
@@ -127,18 +132,23 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
+
+	chainId, err := service.processor.Client.ChainID(ctx)
+	if err != nil {
+		return nil, &EncodingError{StatusCode: -32603, Err: err}
+	}
+
+	newSigner, err := bind.NewKeyedTransactorWithChainID(service.processor.SigningKey, chainId)
+	if err != nil {
+		return nil, &EncodingError{StatusCode: -32602, Err: err}
+	}
+
 	identityPrefix, err := shcrypto.RandomSigma(cryptorand.Reader)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
-	identity := ComputeIdentity(identityPrefix[:], fromAddress)
-
-	encryptedTx := shcrypto.Encrypt(b, &eonKey, identity, sigma)
-
-	newSigner, err := bind.NewKeyedTransactorWithChainID(service.processor.SigningKey, tx.ChainId())
-	if err != nil {
-		return nil, &EncodingError{StatusCode: -32602, Err: err}
-	}
+	identity := ComputeIdentity(identityPrefix[:], newSigner.From)
+	encryptedTx := shcrypto.Encrypt(b, eonKey, identity, sigma)
 
 	opts := bind.TransactOpts{
 		From:   *service.processor.SigningAddress,
@@ -157,10 +167,21 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	}
 
 	if signerBalance.Cmp(submitTx.Cost()) == -1 {
-		return nil, &EncodingError{StatusCode: -32003, Err: err}
+		return nil, &EncodingError{StatusCode: -32003, Err: errors.New("signer is lacking funds")}
 	}
 
-	service.processor.Client.SendTransaction(ctx, submitTx)
+	opts.NoSend = false
+	opts.Value = tx.Cost()
+
+	submitTx, err = service.processor.SequencerContract.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
+	if err != nil {
+		return nil, &EncodingError{StatusCode: -32603, Err: err}
+	}
+
+	_, err = bind.WaitMined(ctx, service.processor.Client, submitTx)
+	if err != nil {
+		return nil, &EncodingError{StatusCode: -32603, Err: err}
+	}
 
 	txHash := tx.Hash()
 	return &txHash, nil
