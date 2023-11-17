@@ -15,7 +15,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/rs/zerolog/log"
 	"github.com/shutter-network/encrypting-rpc-server/contracts"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/server"
@@ -107,14 +106,14 @@ func Cmd() *cobra.Command {
 func Start() error {
 	signingKey, err := crypto.HexToECDSA(Config.SigningKey)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to parse signing key")
+		server.Logger.Fatal().Err(err).Msg("failed to parse signing key")
 	}
 
 	if Config.KeyperSetChangeLookAhead < 1 {
-		log.Fatal().Msg("keyper set change look ahead should be positive")
+		server.Logger.Fatal().Msg("keyper set change look ahead should be positive")
 	}
 
-	log.Info().Msgf("Starting rpc server version %s", shversion.Version())
+	server.Logger.Info().Msgf("Starting rpc server version %s", shversion.Version())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -122,32 +121,32 @@ func Start() error {
 	signal.Notify(termChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		sig := <-termChan
-		log.Info().Str("signal", sig.String()).Msg("Received signal, shutting down")
+		server.Logger.Info().Str("signal", sig.String()).Msg("Received signal, shutting down")
 		cancel()
 	}()
 
 	publicKeyECDSA, ok := signingKey.Public().(*ecdsa.PublicKey)
 	if !ok {
-		log.Fatal().Msg("can not create public key")
+		server.Logger.Fatal().Msg("can not create public key")
 	}
 	publicAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 
 	client, err := ethclient.Dial(Config.RPCUrl)
 	if err != nil {
-		log.Fatal().Msg("can not connect to rpc")
+		server.Logger.Fatal().Msg("can not connect to rpc")
 	}
 
 	broadcastContract, err := contracts.NewKeyBroadcastContract(common.HexToAddress(Config.KeyBroadcastContractAddress), client)
 	if err != nil {
-		log.Fatal().Err(err).Msg("can not use Keybroadcast contract")
+		server.Logger.Fatal().Err(err).Msg("can not use Keybroadcast contract")
 	}
 	sequencerContract, err := contracts.NewSequencerContract(common.HexToAddress(Config.SequencerAddress), client)
 	if err != nil {
-		log.Fatal().Err(err).Msg("can not use Sequencer contract")
+		server.Logger.Fatal().Err(err).Msg("can not use Sequencer contract")
 	}
 	keyperSetManagerContract, err := contracts.NewKeyperSetManagerContract(common.HexToAddress(Config.KeyperSetManagerAddress), client)
 	if err != nil {
-		log.Fatal().Err(err).Msg("can not use Sequencer contract")
+		server.Logger.Fatal().Err(err).Msg("can not use Sequencer contract")
 	}
 
 	processor := rpc.Processor{
@@ -165,7 +164,7 @@ func Start() error {
 	backendURL := &url.URL{}
 	backendURL.UnmarshalText([]byte(Config.RPCUrl))
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to parse RPCUrl")
+		server.Logger.Fatal().Err(err).Msg("failed to parse RPCUrl")
 	}
 
 	config := server.Config{
@@ -174,7 +173,7 @@ func Start() error {
 	}
 
 	service := server.NewRPCService(processor, &config)
-	log.Info().Str("listen-on", Config.HTTPListenAddress).Msg("Serving JSON-RPC")
+	server.Logger.Info().Str("listen-on", Config.HTTPListenAddress).Msg("Serving JSON-RPC")
 
 	medleyService.Run(ctx, service)
 
