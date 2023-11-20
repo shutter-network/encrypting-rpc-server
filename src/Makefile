@@ -12,7 +12,7 @@ build:
 	${GO} build ${GOFLAGS} -o ${EXECUTABLE}
 
 compile-contracts:
-	cd ../gnosh-contracts/src && forge build --extra-output-files abi --force
+	cd ../gnosh-contracts && forge build --extra-output-files abi --force
 
 abigen:
 	abigen --abi ../gnosh-contracts/out/KeyBroadcastContract.sol/KeyBroadcastContract.abi.json --pkg contracts --out contracts/KeyBroadcastContract.go --type KeyBroadcastContract && \

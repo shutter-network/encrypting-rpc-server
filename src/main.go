@@ -2,8 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
-
+	"github.com/rs/zerolog/log"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 
@@ -64,7 +63,7 @@ func Cmd() *cobra.Command {
 		&Config.HTTPListenAddress,
 		"http-listen-address",
 		"",
-		"http://localhost:8546",
+		":8546",
 		"server listening address",
 	)
 
@@ -133,7 +132,7 @@ func Start() error {
 
 	client, err := ethclient.Dial(Config.RPCUrl)
 	if err != nil {
-		server.Logger.Fatal().Msg("can not connect to rpc")
+		server.Logger.Fatal().Err(err).Msg("can not connect to rpc")
 	}
 
 	broadcastContract, err := contracts.NewKeyBroadcastContract(common.HexToAddress(Config.KeyBroadcastContractAddress), client)
@@ -162,7 +161,7 @@ func Start() error {
 	}
 
 	backendURL := &url.URL{}
-	backendURL.UnmarshalText([]byte(Config.RPCUrl))
+	err = backendURL.UnmarshalText([]byte(Config.RPCUrl))
 	if err != nil {
 		server.Logger.Fatal().Err(err).Msg("failed to parse RPCUrl")
 	}
@@ -175,7 +174,12 @@ func Start() error {
 	service := server.NewRPCService(processor, &config)
 	server.Logger.Info().Str("listen-on", Config.HTTPListenAddress).Msg("Serving JSON-RPC")
 
-	medleyService.Run(ctx, service)
+	func() {
+		err = medleyService.Run(ctx, service)
+		if err != nil {
+			log.Fatal().Err(err).Msg("server failed")
+		}
+	}()
 
 	return err
 }
@@ -183,7 +187,7 @@ func Start() error {
 func main() {
 	status := 0
 	if err := Cmd().Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		server.Logger.Info().Err(err).Msg("failed running server")
 		status = 1
 	}
 	os.Exit(status)
