@@ -30,11 +30,9 @@ func (r *EncodingError) Error() string {
 	return fmt.Sprintf("status %d: err %v", r.StatusCode, r.Err)
 }
 
-var EpochComputer = shcrypto.ComputeEpochID
-
 func ComputeIdentity(prefix []byte, sender common.Address) *shcrypto.EpochID {
 	imageBytes := append(prefix, sender.Bytes()...)
-	return EpochComputer(identitypreimage.IdentityPreimage(imageBytes).Bytes())
+	return shcrypto.ComputeEpochID(identitypreimage.IdentityPreimage(imageBytes).Bytes())
 }
 
 func ComputeSlotFunc(blockTimestamp uint64) (*uint64, error) {

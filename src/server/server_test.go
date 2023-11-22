@@ -105,8 +105,10 @@ func processorTest(t *testing.T) {
 			return err
 		}
 		buf := new(bytes.Buffer)
-		ts := txtypes.Transactions{signedTx}
-		ts.EncodeIndex(0, buf)
+		err = signedTx.EncodeRLP(buf)
+		if err != nil {
+			return err
+		}
 		rawTx := hexutil.Encode(buf.Bytes())
 		err = client.SendTransaction(ctx, signedTx)
 		if err != nil {
@@ -159,7 +161,8 @@ func processorTest(t *testing.T) {
 }
 
 func TestServer(t *testing.T) {
-	proc, err := test.SetupServer()
+	ctx := context.Background()
+	err := test.SetupServer(ctx, t)
 	if err != nil {
 		log.Info().Err(err).Msg("setupServer failed")
 		t.FailNow()
@@ -170,14 +173,4 @@ func TestServer(t *testing.T) {
 
 	processorSuccess := t.Run("processor test", processorTest)
 	log.Info().Bool("process", processorSuccess).Msg("return")
-
-	t.Cleanup(func() {
-		log.Info().Msg("kill ganache")
-		if proc != nil {
-			err := proc.Kill()
-			if err != nil {
-				log.Fatal().Err(err).Msg("can not kill ganache")
-			}
-		}
-	})
 }

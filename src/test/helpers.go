@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
@@ -30,10 +31,8 @@ func init() {
 }
 
 var (
-	TestKeygen *medleyKeygen.TestKeyGenerator
-	TestEonKey *shcrypto.EonPublicKey
-	// TestEpochID          = shcrypto.ComputeEpochID([]byte("test"))
-	// TestIdentityPreimage = []byte("test")
+	TestKeygen      *medleyKeygen.TestKeyGenerator
+	TestEonKey      *shcrypto.EonPublicKey
 	DeployerKey     = "a26ebb1df46424945009db72c7a7ba034027450784b93f34000169b35fd3adaa"
 	DeployerAddress = "0xA868bC7c1AF08B8831795FAC946025557369F69C"
 	BackendURL      = "http://localhost:8545"
@@ -65,32 +64,20 @@ type DeployTx struct {
 	IsFixedGasLimit     bool         `json:"isFixedGasLimit"`
 }
 
-type ReceiptLog struct {
-	Address          string   `json:"address"`
-	Topics           []string `json:"topics"`
-	Data             string   `json:"data"`
-	BlockHash        string   `json:"blockHash"`
-	BlockNumber      string   `json:"blockNumber"`
-	TransactionHash  string   `json:"transactionHash"`
-	TransactionIndex string   `json:"transactionIndex"`
-	LogIndex         string   `json:"logIndex"`
-	Removed          bool     `json:"removed"`
-}
-
 type DeployReceipt struct {
-	TransactionHash   string       `json:"transactionHash"`
-	TransactionIndex  string       `json:"transactionIndex"`
-	BlockHash         string       `json:"blockHash"`
-	From              string       `json:"from"`
-	To                *string      `json:"to"`
-	CumulativeGasUsed string       `json:"cumulativeGasUsed"`
-	GasUsed           string       `json:"gasUsed"`
-	ContractAddress   string       `json:"contractAddress"`
-	Logs              []ReceiptLog `json:"logs"`
-	Status            string       `json:"status"`
-	LogsBloom         string       `json:"logsBloom"`
-	Type              string       `json:"type"`
-	EffectiveGasPrice string       `json:"effectiveGasPrice"`
+	TransactionHash   string      `json:"transactionHash"`
+	TransactionIndex  string      `json:"transactionIndex"`
+	BlockHash         string      `json:"blockHash"`
+	From              string      `json:"from"`
+	To                *string     `json:"to"`
+	CumulativeGasUsed string      `json:"cumulativeGasUsed"`
+	GasUsed           string      `json:"gasUsed"`
+	ContractAddress   string      `json:"contractAddress"`
+	Logs              []types.Log `json:"logs"`
+	Status            string      `json:"status"`
+	LogsBloom         string      `json:"logsBloom"`
+	Type              string      `json:"type"`
+	EffectiveGasPrice string      `json:"effectiveGasPrice"`
 }
 
 type DeployData struct {
@@ -137,11 +124,11 @@ func GetContractData() (map[string]common.Address, error) {
 	return contractInfo, nil
 }
 
-func setupGanacheServer() (*os.Process, error) {
+func setupGanacheServer(ctx context.Context, t *testing.T) error {
 	ganachePath, err := exec.Command("which", "ganache").Output()
 	if err != nil {
 		log.Info().Msg("can not get ganache path")
-		return nil, err
+		return err
 	}
 	args := []string{"--miner.blockTime=5", "--chain.time=2021-12-08T20:55:40", "--logging.verbose", "--wallet.mnemonic=brownie"}
 	procAttr := new(os.ProcAttr)
@@ -150,10 +137,18 @@ func setupGanacheServer() (*os.Process, error) {
 	proc, err := os.StartProcess(ganachePathAsString, args, procAttr)
 	if err != nil {
 		log.Info().Msg("can not start ganache process")
-		return nil, err
+		return err
 	}
+	t.Cleanup(func() {
+		log.Info().Msg("kill ganache")
+		if proc != nil {
+			err := proc.Kill()
+			if err != nil {
+				log.Fatal().Err(err).Msg("can not kill ganache")
+			}
+		}
+	})
 	for {
-		ctx := context.Background()
 		client, _ := ethclient.Dial("http://localhost:8545")
 		_, err := client.ChainID(ctx)
 		if err != nil {
@@ -163,11 +158,10 @@ func setupGanacheServer() (*os.Process, error) {
 			break
 		}
 	}
-	return proc, nil
+	return nil
 }
 
-func setupProcessor() rpc.Processor {
-	ctx := context.Background()
+func setupProcessor(ctx context.Context) rpc.Processor {
 
 	contractInfo, err := GetContractData()
 	if err != nil {
@@ -198,10 +192,7 @@ func setupProcessor() rpc.Processor {
 		log.Fatal().Err(err).Msg("can not get chain id")
 	}
 
-	b, err := TestEonKey.GobEncode()
-	if err != nil {
-		log.Fatal().Err(err).Msg("Test")
-	}
+	b, _ := TestEonKey.GobEncode()
 	txOps, err := bind.NewKeyedTransactorWithChainID(privKey, chainId)
 	if err != nil {
 		log.Fatal().Err(err).Msg("can not get txOps")
@@ -238,38 +229,39 @@ func CaptureOutput(f func() error) (error, string) {
 	var buf bytes.Buffer
 	oldLogger := server.Logger
 	newLogger := server.Logger.Output(&buf)
+	defer func() {
+		server.Logger = oldLogger
+	}()
 	server.Logger = newLogger
 	err := f()
-	server.Logger = oldLogger
 	return err, buf.String()
 }
 
-func SetupServer() (*os.Process, error) {
-	ctx := context.Background()
-	proc, err := setupGanacheServer()
+func SetupServer(ctx context.Context, t *testing.T) error {
+	err := setupGanacheServer(ctx, t)
 	if err != nil {
 		log.Info().Msg("ganache server didnt run")
-		return proc, err
+		return err
 	}
 	cmd := exec.Command("make", "deploy")
 	wd, err := os.Getwd()
 	if err != nil {
 		log.Info().Msg("can not get wd")
-		return proc, err
+		return err
 	}
 	cmd.Dir = wd + "/../"
 	err = cmd.Run()
 	if err != nil {
 		log.Info().Msg("make deploy failed")
-		return proc, err
+		return err
 	}
 
-	processor := setupProcessor()
+	processor := setupProcessor(ctx)
 	backendUrl := &url.URL{}
 	err = backendUrl.UnmarshalText([]byte(processor.RPCUrl))
 	if err != nil {
 		log.Info().Msg("can not unmarshal rpcurl")
-		return proc, err
+		return err
 	}
 	config := server.Config{
 		BackendURL:        backendUrl,
@@ -282,5 +274,5 @@ func SetupServer() (*os.Process, error) {
 			log.Info().Err(err).Msg("server can not run")
 		}
 	}()
-	return proc, nil
+	return nil
 }
