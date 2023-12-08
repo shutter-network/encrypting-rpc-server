@@ -1,0 +1,63 @@
+version: 2.1
+
+setup: true
+
+orbs:
+  go: circleci/go@1.9.0
+
+jobs:
+  build:
+    working_directory: ~/project/src
+    docker:
+      - image: cimg/go:1.21.4
+    steps:
+      - checkout:
+          path: ~/project
+      - go/load-cache
+      - go/mod-download
+      - go/save-cache
+      - run: make build
+  lint:
+    working_directory: ~/project/src
+    docker:
+      - image: cimg/go:1.21.4
+    steps:
+      - checkout:
+          path: ~/project
+      - go/load-cache
+      - go/mod-download
+      - go/save-cache
+      - run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          make lint-changes
+  test:
+    working_directory: ~/project/src
+    docker:
+      - image: cimg/go:1.21.4-node
+    steps:
+      - checkout:
+          path: ~/project
+      - go/load-cache
+      - go/mod-download
+      - go/save-cache
+      - run: |
+          cd ..
+          git submodule update --init
+      - run: |
+          sudo npm install ganache --location=global
+          curl -L https://foundry.paradigm.xyz | bash || true
+          echo 'export PATH="$PATH:/home/circleci/.foundry/bin"' >> "${BASH_ENV}"
+      - run: |
+          foundryup
+          make compile-contracts
+      - go/test:
+          covermode: atomic
+          failfast: true
+          race: true
+
+workflows:
+  server:
+    jobs:
+      - build
+      - lint
+      - test
