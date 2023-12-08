@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
@@ -42,54 +41,13 @@ var (
 	TxToAddress     = "0x33A4622B82D4c04a53e170c638B944ce27cffce3"
 )
 
-type DeployTxData struct {
-	Type       string   `json:"type"`
-	From       string   `json:"from"`
-	Gas        string   `json:"gas"`
-	Value      string   `json:"value"`
-	Data       string   `json:"data"`
-	Nonce      string   `json:"nonce"`
-	AccessList []string `json:"accessList"`
-}
-
 type DeployTx struct {
-	Hash                string       `json:"hash"`
-	TransactionType     string       `json:"transactionType"`
-	ContractName        string       `json:"contractName"`
-	ContractAddress     string       `json:"contractAddress"`
-	Function            string       `json:"function"`
-	Arguments           []string     `json:"arguments"`
-	Transaction         DeployTxData `json:"transaction"`
-	AdditionalContracts []string     `json:"additionalContracts"`
-	IsFixedGasLimit     bool         `json:"isFixedGasLimit"`
-}
-
-type DeployReceipt struct {
-	TransactionHash   string      `json:"transactionHash"`
-	TransactionIndex  string      `json:"transactionIndex"`
-	BlockHash         string      `json:"blockHash"`
-	From              string      `json:"from"`
-	To                *string     `json:"to"`
-	CumulativeGasUsed string      `json:"cumulativeGasUsed"`
-	GasUsed           string      `json:"gasUsed"`
-	ContractAddress   string      `json:"contractAddress"`
-	Logs              []types.Log `json:"logs"`
-	Status            string      `json:"status"`
-	LogsBloom         string      `json:"logsBloom"`
-	Type              string      `json:"type"`
-	EffectiveGasPrice string      `json:"effectiveGasPrice"`
+	ContractName    string `json:"contractName"`
+	ContractAddress string `json:"contractAddress"`
 }
 
 type DeployData struct {
-	Transactions []DeployTx        `json:"transactions"`
-	Receipts     []DeployReceipt   `json:"receipts"`
-	Libraries    []string          `json:"libraries"`
-	Pending      []string          `json:"pending"`
-	Returns      map[string]string `json:"returns"`
-	Timestamp    int               `json:"timestamp"`
-	Chain        int               `json:"chain"`
-	Multi        bool              `json:"multi"`
-	Commit       string            `json:"commit"`
+	Transactions []DeployTx `json:"transactions"`
 }
 
 func GetContractData() (map[string]common.Address, error) {
