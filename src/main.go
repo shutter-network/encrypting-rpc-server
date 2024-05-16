@@ -14,9 +14,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/shutter-network/encrypting-rpc-server/contracts"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/server"
+	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
+	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
+
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/cmd/shversion"
@@ -135,15 +137,15 @@ func Start() error {
 		server.Logger.Fatal().Err(err).Msg("can not connect to rpc")
 	}
 
-	broadcastContract, err := contracts.NewKeyBroadcastContract(common.HexToAddress(Config.KeyBroadcastContractAddress), client)
+	broadcastContract, err := shopContractBindings.NewKeyBroadcastContract(common.HexToAddress(Config.KeyBroadcastContractAddress), client)
 	if err != nil {
 		server.Logger.Fatal().Err(err).Msg("can not use Keybroadcast contract")
 	}
-	sequencerContract, err := contracts.NewSequencerContract(common.HexToAddress(Config.SequencerAddress), client)
+	sequencerContract, err := sequencerBindings.NewSequencer(common.HexToAddress(Config.SequencerAddress), client)
 	if err != nil {
 		server.Logger.Fatal().Err(err).Msg("can not use Sequencer contract")
 	}
-	keyperSetManagerContract, err := contracts.NewKeyperSetManagerContract(common.HexToAddress(Config.KeyperSetManagerAddress), client)
+	keyperSetManagerContract, err := shopContractBindings.NewKeyperSetManager(common.HexToAddress(Config.KeyperSetManagerAddress), client)
 	if err != nil {
 		server.Logger.Fatal().Err(err).Msg("can not use Sequencer contract")
 	}

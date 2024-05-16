@@ -22,7 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/rs/zerolog/log"
-	"github.com/shutter-network/encrypting-rpc-server/contracts"
+	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
@@ -78,7 +78,7 @@ func processorTest(t *testing.T) {
 		t.FailNow()
 	}
 
-	sequencerContract, err := contracts.NewSequencerContract(contractInfo["Sequencer"], client)
+	sequencerContract, err := sequencerBindings.NewSequencerContract(contractInfo["Sequencer"], client)
 	if err != nil {
 		log.Info().Err(err).Msg("can not get sequencer contract")
 		t.FailNow()

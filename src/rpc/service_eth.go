@@ -111,7 +111,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("gas cost is higher")}
 	}
 
-	eon, err := service.processor.KeyperSetManagerContract.GetKeyperSetIndexBySlot(nil, *slot+uint64(service.processor.KeyperSetChangeLookAhead))
+	eon, err := service.processor.KeyperSetManagerContract.GetKeyperSetIndexByBlock(nil, *slot+uint64(service.processor.KeyperSetChangeLookAhead))
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
