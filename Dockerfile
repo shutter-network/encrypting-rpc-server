@@ -3,7 +3,6 @@ FROM golang:1.21-alpine3.17 as goDependencies
 COPY ./src/go.mod /deps/go.mod
 COPY ./src/go.sum /deps/go.sum
 WORKDIR /deps
-RUN go install github.com/ethereum/go-ethereum/cmd/abigen@latest
 RUN go mod download
 
 FROM ghcr.io/foundry-rs/foundry:latest as contracts
@@ -21,7 +20,7 @@ COPY --from=goDependencies /go /go
 RUN apk add --no-cache make
 WORKDIR /src
 RUN mkdir /abis
-RUN make abigen && make build
+RUN make build
 
 FROM golang:1.21-alpine3.17
 COPY --from=appBuilder /src/bin/encrypting-rpc-server /bin/encrypting-rpc-server
