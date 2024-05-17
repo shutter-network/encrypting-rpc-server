@@ -203,6 +203,8 @@ func SetupServer(ctx context.Context, t *testing.T) error {
 		return err
 	}
 	cmd := exec.Command("make", "deploy")
+	cmd.Env = os.Environ()
+    cmd.Env = append(cmd.Env, "ETHERSCAN_API_KEY=''")
 	wd, err := os.Getwd()
 	if err != nil {
 		log.Info().Msg("can not get wd")
