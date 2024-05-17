@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httputil"
 	"time"
 
 	ethrpc "github.com/ethereum/go-ethereum/rpc"
@@ -94,10 +93,9 @@ func (srv *server) rpcHandler() (http.Handler, error) {
 	}
 
 	p := &JSONRPCProxy{
-		backend:   httputil.NewSingleHostReverseProxy(srv.config.BackendURL.URL),
+		backend:   NewReverseProxy(srv.config.BackendURL),
 		processor: rpcServer,
 	}
-	// handler := injectHTTPLogger(p)
 	return p, nil
 }
 
