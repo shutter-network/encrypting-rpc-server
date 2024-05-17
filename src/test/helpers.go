@@ -10,7 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
 	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
-	validatorRegistryBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/validatorregistry"
 	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/server"
@@ -137,7 +136,7 @@ func setupProcessor(ctx context.Context) rpc.Processor {
 		log.Fatal().Err(err).Msg("can not connect to rpcUrl")
 	}
 
-	keyperSetManagerContract, err := shopContractBindings.NewKeyperSetManagerContract(contractInfo["KeyperSetManager"], client)
+	keyperSetManagerContract, err := shopContractBindings.NewKeyperSetManager(contractInfo["KeyperSetManager"], client)
 	if err != nil {
 		log.Fatal().Err(err).Msg("can not get KeyperSetManager")
 	}
@@ -166,7 +165,7 @@ func setupProcessor(ctx context.Context) rpc.Processor {
 		log.Fatal().Err(err).Msg("can not mine broadcasteonkey")
 	}
 
-	sequencerContract, err := sequencerBindings.NewSequencerContract(contractInfo["Sequencer"], client)
+	sequencerContract, err := sequencerBindings.NewSequencer(contractInfo["Sequencer"], client)
 	if err != nil {
 		log.Fatal().Err(err).Msg("can not get Sequencer")
 	}

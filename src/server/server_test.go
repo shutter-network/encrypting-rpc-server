@@ -23,7 +23,6 @@ import (
 	txtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/rs/zerolog/log"
 	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
-	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 )
@@ -50,8 +49,6 @@ func backendTest(t *testing.T) {
 }
 
 func processorTest(t *testing.T) {
-	slot := uint64(0)
-	rpc.ComputeSlot = func(blockTimestamp uint64) (*uint64, error) { return &slot, nil }
 	ctx := context.Background()
 	fromAddress := common.HexToAddress(test.TxFromAddress)
 	toAddress := common.HexToAddress(test.TxToAddress)
@@ -78,7 +75,7 @@ func processorTest(t *testing.T) {
 		t.FailNow()
 	}
 
-	sequencerContract, err := sequencerBindings.NewSequencerContract(contractInfo["Sequencer"], client)
+	sequencerContract, err := sequencerBindings.NewSequencer(contractInfo["Sequencer"], client)
 	if err != nil {
 		log.Info().Err(err).Msg("can not get sequencer contract")
 		t.FailNow()
