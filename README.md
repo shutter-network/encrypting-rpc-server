@@ -5,8 +5,8 @@ This server is using Gnosis Chain Configuration and Shutter Network Mempool encr
 ## Requirements
 
 To deploy and use for requests other than eth_sendRawTransaction
-* Ganache
-* Foundry
+* Ganache >= 7.0.0
+* Foundry >= 0.2.0
 
 To start and build the server:
 * Docker

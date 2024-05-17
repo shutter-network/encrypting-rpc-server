@@ -5,7 +5,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/shutter-network/encrypting-rpc-server/contracts"
+	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
+	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
 )
 
 type Processor struct {
@@ -15,9 +16,9 @@ type Processor struct {
 	SigningAddress           *common.Address
 	KeyperSetChangeLookAhead int
 	Client                   *ethclient.Client
-	KeyBroadcastContract     *contracts.KeyBroadcastContract
-	SequencerContract        *contracts.SequencerContract
-	KeyperSetManagerContract *contracts.KeyperSetManagerContract
+	KeyBroadcastContract     *shopContractBindings.KeyBroadcastContract
+	SequencerContract        *sequencerBindings.Sequencer
+	KeyperSetManagerContract *shopContractBindings.KeyperSetManager
 }
 
 type RPCService interface {

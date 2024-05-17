@@ -35,21 +35,6 @@ func ComputeIdentity(prefix []byte, sender common.Address) *shcrypto.EpochID {
 	return shcrypto.ComputeEpochID(identitypreimage.IdentityPreimage(imageBytes).Bytes())
 }
 
-func ComputeSlotFunc(blockTimestamp uint64) (*uint64, error) {
-	if blockTimestamp < uint64(GENESIS_TIME) {
-		return nil, errors.New("Slot computation error")
-	}
-	if (blockTimestamp-uint64(GENESIS_TIME))%uint64(SECONDS_PER_SLOT) != 0 {
-		return nil, errors.New("Slot computation error")
-	}
-
-	slot := (blockTimestamp - uint64(GENESIS_TIME)) / uint64(SECONDS_PER_SLOT)
-
-	return &slot, nil
-}
-
-var ComputeSlot = ComputeSlotFunc
-
 type EthService struct {
 	processor Processor
 }
@@ -72,14 +57,11 @@ func (service *EthService) SendTransaction(ctx context.Context, tx *txtypes.Tran
 }
 
 func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*common.Hash, error) {
-	block, err := service.processor.Client.BlockByNumber(ctx, nil)
+	blockNumber, err := service.processor.Client.BlockNumber(ctx)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
-	slot, err := ComputeSlot(block.Header().Time)
-	if err != nil {
-		return nil, &EncodingError{StatusCode: -32602, Err: err}
-	}
+
 	b, err := hexutil.Decode(s)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
@@ -111,7 +93,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("gas cost is higher")}
 	}
 
-	eon, err := service.processor.KeyperSetManagerContract.GetKeyperSetIndexBySlot(nil, *slot+uint64(service.processor.KeyperSetChangeLookAhead))
+	eon, err := service.processor.KeyperSetManagerContract.GetKeyperSetIndexByBlock(nil, blockNumber+uint64(service.processor.KeyperSetChangeLookAhead))
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
@@ -151,27 +133,11 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	opts := bind.TransactOpts{
 		From:   *service.processor.SigningAddress,
 		Signer: newSigner.Signer,
-		NoSend: true,
 	}
 
-	submitTx, err := service.processor.SequencerContract.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
-	if err != nil {
-		return nil, &EncodingError{StatusCode: -32603, Err: err}
-	}
-
-	signerBalance, err := service.processor.Client.BalanceAt(ctx, *service.processor.SigningAddress, nil)
-	if err != nil {
-		return nil, &EncodingError{StatusCode: -32603, Err: err}
-	}
-
-	if signerBalance.Cmp(submitTx.Cost()) == -1 {
-		return nil, &EncodingError{StatusCode: -32003, Err: errors.New("signer is lacking funds")}
-	}
-
-	opts.NoSend = false
 	opts.Value = tx.Cost()
 
-	submitTx, err = service.processor.SequencerContract.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
+	submitTx, err := service.processor.SequencerContract.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
