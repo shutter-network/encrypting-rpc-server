@@ -61,6 +61,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
+
 	b, err := hexutil.Decode(s)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
@@ -132,27 +133,11 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	opts := bind.TransactOpts{
 		From:   *service.processor.SigningAddress,
 		Signer: newSigner.Signer,
-		NoSend: true,
 	}
 
-	submitTx, err := service.processor.SequencerContract.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
-	if err != nil {
-		return nil, &EncodingError{StatusCode: -32603, Err: err}
-	}
-
-	signerBalance, err := service.processor.Client.BalanceAt(ctx, *service.processor.SigningAddress, nil)
-	if err != nil {
-		return nil, &EncodingError{StatusCode: -32603, Err: err}
-	}
-
-	if signerBalance.Cmp(submitTx.Cost()) == -1 {
-		return nil, &EncodingError{StatusCode: -32003, Err: errors.New("signer is lacking funds")}
-	}
-
-	opts.NoSend = false
 	opts.Value = tx.Cost()
 
-	submitTx, err = service.processor.SequencerContract.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
+	submitTx, err := service.processor.SequencerContract.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
