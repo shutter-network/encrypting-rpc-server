@@ -21,3 +21,6 @@
 go.work
 src/bin/
 .idea/
+
+# docker compose
+docker/.env
