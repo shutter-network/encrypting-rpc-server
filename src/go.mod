@@ -1,15 +1,17 @@
 module github.com/shutter-network/encrypting-rpc-server
 
-go 1.21
+go 1.21.4
 
-toolchain go1.21.1
+toolchain go1.21.10
 
 require (
 	github.com/ethereum/go-ethereum v1.13.14
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.28.0
+	github.com/shutter-network/gnosh-contracts v0.2.0
 	github.com/shutter-network/rolling-shutter/rolling-shutter v0.0.7-0.20231114104306-f1b9a8f366b2
+	github.com/shutter-network/shop-contracts v0.0.0-20240407183559-9504b6278cef
 	github.com/shutter-network/shutter/shlib v0.1.18
 	github.com/spf13/cobra v1.6.1
 )
@@ -54,8 +56,7 @@ require (
 	github.com/multiformats/go-multihash v0.2.3 // indirect
 	github.com/multiformats/go-varint v0.0.7 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
-	github.com/pelletier/go-toml/v2 v2.0.9 // indirect
-	github.com/rs/xid v1.4.0 // indirect
+	github.com/pelletier/go-toml/v2 v2.1.0 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/afero v1.8.2 // indirect

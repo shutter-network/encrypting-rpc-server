@@ -1,0 +1,31 @@
+name: encrypting_rpc
+services:
+  rpc:
+    image: shutter-network/encrypting-rpc
+    build:
+      context: ../
+    env_file: .env
+    command: >
+      start
+      --signing-key ${SIGNING_KEY}
+      --key-broadcast-contract-address ${KEY_BROADCAST_CONTRACT_ADDRESS}
+      --sequencer-address ${SEQUENCER_CONTRACT_ADDRESS}
+      --keyper-set-manager-address ${KEYPER_SET_MANAGER_CONTRACT_ADDRESS}
+      --rpc-url ${UPSTREAM_RPC}
+    labels:
+      caddy: "${SERVICE_DOMAIN_NAME}"
+      caddy.reverse_proxy: "{{ upstreams 8546 }}"
+
+  caddy:
+    image: lucaslorentz/caddy-docker-proxy:latest
+    restart: always
+    profiles:
+      - proxy
+    volumes:
+      - ${DATA_DIR:-./data}/caddy:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 80:80
+      - 443:443
+    labels:
+      caddy.email: "devops@brainbot.com"

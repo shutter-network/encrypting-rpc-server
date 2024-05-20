@@ -9,7 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
-	"github.com/shutter-network/encrypting-rpc-server/contracts"
+	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
+	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/server"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
@@ -135,12 +136,12 @@ func setupProcessor(ctx context.Context) rpc.Processor {
 		log.Fatal().Err(err).Msg("can not connect to rpcUrl")
 	}
 
-	keyperSetManagerContract, err := contracts.NewKeyperSetManagerContract(contractInfo["KeyperSetManager"], client)
+	keyperSetManagerContract, err := shopContractBindings.NewKeyperSetManager(contractInfo["KeyperSetManager"], client)
 	if err != nil {
 		log.Fatal().Err(err).Msg("can not get KeyperSetManager")
 	}
 
-	broadcastContract, err := contracts.NewKeyBroadcastContract(contractInfo["KeyBroadcastContract"], client)
+	broadcastContract, err := shopContractBindings.NewKeyBroadcastContract(contractInfo["KeyBroadcastContract"], client)
 	if err != nil {
 		log.Fatal().Err(err).Msg("can not get KeyBrodcastContract")
 	}
@@ -164,7 +165,7 @@ func setupProcessor(ctx context.Context) rpc.Processor {
 		log.Fatal().Err(err).Msg("can not mine broadcasteonkey")
 	}
 
-	sequencerContract, err := contracts.NewSequencerContract(contractInfo["Sequencer"], client)
+	sequencerContract, err := sequencerBindings.NewSequencer(contractInfo["Sequencer"], client)
 	if err != nil {
 		log.Fatal().Err(err).Msg("can not get Sequencer")
 	}
@@ -202,6 +203,8 @@ func SetupServer(ctx context.Context, t *testing.T) error {
 		return err
 	}
 	cmd := exec.Command("make", "deploy")
+	cmd.Env = os.Environ()
+    cmd.Env = append(cmd.Env, "ETHERSCAN_API_KEY=''")
 	wd, err := os.Getwd()
 	if err != nil {
 		log.Info().Msg("can not get wd")
