@@ -328,8 +328,8 @@ github.com/shutter-network/rolling-shutter/rolling-shutter v0.0.7-0.202311141043
 github.com/shutter-network/rolling-shutter/rolling-shutter v0.0.7-0.20231114104306-f1b9a8f366b2/go.mod h1:QxJRcyOPZLEkrPX7q60m2/ODxAQCI7D4NzBh41YXcx8=
 github.com/shutter-network/shop-contracts v0.0.0-20240407183559-9504b6278cef h1:vIQD/6vR5t/A5Z/SVx2FGmaLnRMqCFR/rzIddcU3pFI=
 github.com/shutter-network/shop-contracts v0.0.0-20240407183559-9504b6278cef/go.mod h1:LEWXLRruvxq9fe2oKtJI3xfzbauhfWTjOczHN61RU+4=
-github.com/shutter-network/shutter/shlib v0.1.18 h1:ei1EWEavnlkwbX51aGKtgt7NydY0IPNV35J525vAfeo=
-github.com/shutter-network/shutter/shlib v0.1.18/go.mod h1:RlYNZjx+pfKAi0arH+jfdlxG4kQ75UFzDfVjgCVYaUw=
+github.com/shutter-network/shutter/shlib v0.1.19-0.20240520193152-f4f56ef19f9e h1:ApPJlt+gwY3s8XcoDEf3kTHpK1TWxAUubCRyyrtb01U=
+github.com/shutter-network/shutter/shlib v0.1.19-0.20240520193152-f4f56ef19f9e/go.mod h1:RlYNZjx+pfKAi0arH+jfdlxG4kQ75UFzDfVjgCVYaUw=
 github.com/spaolacci/murmur3 v1.1.0 h1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=
 github.com/spaolacci/murmur3 v1.1.0/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/spf13/afero v1.8.2 h1:xehSyVa0YnHWsJ49JFljMpg1HX19V6NDZ1fkm1Xznbo=
