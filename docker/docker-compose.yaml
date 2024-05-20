@@ -2,6 +2,7 @@ name: encrypting_rpc
 services:
   rpc:
     image: shutter-network/encrypting-rpc
+    restart: always
     build:
       context: ../
     env_file: .env
@@ -19,8 +20,6 @@ services:
   caddy:
     image: lucaslorentz/caddy-docker-proxy:latest
     restart: always
-    profiles:
-      - proxy
     volumes:
       - ${DATA_DIR:-./data}/caddy:/data
       - /var/run/docker.sock:/var/run/docker.sock
