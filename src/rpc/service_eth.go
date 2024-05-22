@@ -146,7 +146,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		Signer: newSigner.Signer,
 	}
 
-	opts.Value = tx.Cost()
+	opts.Value = new(big.Int).Sub(tx.Cost(), tx.Value())
 
 	submitTx, err := service.processor.SequencerContract.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
 	if err != nil {
