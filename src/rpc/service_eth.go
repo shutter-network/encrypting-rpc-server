@@ -37,10 +37,12 @@ func ComputeIdentity(prefix []byte, sender common.Address) *shcrypto.EpochID {
 
 type EthService struct {
 	processor Processor
+	processedTransactions map[common.Hash]bool
 }
 
 func (s *EthService) InjectProcessor(p Processor) {
 	s.processor = p
+	s.processedTransactions = make(map[common.Hash]bool)
 }
 
 func (s *EthService) Name() string {
@@ -57,6 +59,7 @@ func (service *EthService) SendTransaction(ctx context.Context, tx *txtypes.Tran
 }
 
 func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*common.Hash, error) {
+
 	blockNumber, err := service.processor.Client.BlockNumber(ctx)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
@@ -70,6 +73,14 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	if err := tx.UnmarshalBinary(b); err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
+
+    txHash := tx.Hash()
+	_, sent := service.processedTransactions[txHash]
+    if sent {
+        Logger.Info().Hex("Tx hash", txHash.Bytes()).Msg("Transaction already sequenced")
+        return &txHash, nil
+    }
+
 	signer := txtypes.NewLondonSigner(tx.ChainId())
 	fromAddress, err := signer.Sender(tx)
 	if err != nil {
@@ -147,6 +158,6 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
 
-	txHash := tx.Hash()
+    service.processedTransactions[txHash] = true
 	return &txHash, nil
 }
