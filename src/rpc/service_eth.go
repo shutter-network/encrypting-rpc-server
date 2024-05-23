@@ -152,7 +152,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
-
+    Logger.Info().Hex("Incoming tx hash", txHash.Bytes()).Hex("Encrypted tx hash", submitTx.Hash().Bytes()).Msg("Transaction sent")
 	_, err = bind.WaitMined(ctx, service.processor.Client, submitTx)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
