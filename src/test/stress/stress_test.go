@@ -108,6 +108,7 @@ func submitEncryptedTx(ctx context.Context, tx types.Transaction, from *common.A
 
 	encryptedTx, eon, identityPrefix := encrypt(ctx, client, tx, pk)
 
+	// TODO: set opts.Nonce !
 	submitTx, err := sequencerContract.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
 	if err != nil {
 		log.Fatal("Could not submit", err)
@@ -184,3 +185,14 @@ func TestStress(t *testing.T) {
 	transact()
 	fmt.Println("transacted")
 }
+
+/* TODO:
+
+- transact batches
+- plan nonces: for i in len(batch)
+  - submit nonces = latest nonce + i
+  - encrypted nonces = latest nonce + len(batch) + i
+
+- collect tx hashes, wait for mined only after batch is submitted
+
+*/
