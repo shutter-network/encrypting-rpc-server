@@ -16,13 +16,20 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
-	"github.com/shutter-network/encrypting-rpc-server/test"
 	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
 	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 )
 
+// the ethereum address of the key broadcast contract
+const KEY_BROADCAST_CONTRACT_ADDRESS = "0x1FD85EfeC5FC18f2f688f82489468222dfC36d6D"
+
+// the ethereum address of the sequencer contract
 const SEQUENCER_CONTRACT_ADDRESS = "0xd073BD5A717Dce1832890f2Fdd9F4fBC4555e41A"
+
+// the ethereum address of the keyper set manager contract
+const KEYPER_SET_MANAGER_CONTRACT_ADDRESS = "0x7Fbc29C682f59f809583bFEE0fc50F1e4eb77774"
+
 const KeyperSetChangeLookAhead = 2
 
 func encrypt(ctx context.Context, client *ethclient.Client, tx types.Transaction, pk *ecdsa.PrivateKey) (*shcrypto.EncryptedMessage, uint64, shcrypto.Block) {
@@ -31,12 +38,7 @@ func encrypt(ctx context.Context, client *ethclient.Client, tx types.Transaction
 		log.Fatal("could not query blockNumber", err)
 	}
 
-	contractInfo, err := test.GetContractData()
-	if err != nil {
-		log.Fatal("can not get contract info", err)
-	}
-
-	keyperSetManagerContract, err := shopContractBindings.NewKeyperSetManager(contractInfo["KeyperSetManager"], client)
+	keyperSetManagerContract, err := shopContractBindings.NewKeyperSetManager(common.HexToAddress(KEYPER_SET_MANAGER_CONTRACT_ADDRESS), client)
 	if err != nil {
 		log.Fatal("can not get KeyperSetManager", err)
 	}
@@ -45,7 +47,7 @@ func encrypt(ctx context.Context, client *ethclient.Client, tx types.Transaction
 		log.Fatal("could not get eon", err)
 	}
 
-	keyBroadcastContract, err := shopContractBindings.NewKeyBroadcastContract(contractInfo["KeyBroadcastContract"], client)
+	keyBroadcastContract, err := shopContractBindings.NewKeyBroadcastContract(common.HexToAddress(KEY_BROADCAST_CONTRACT_ADDRESS), client)
 	if err != nil {
 		log.Fatal("can not get KeyBrodcastContract", err)
 	}
@@ -102,11 +104,7 @@ func submitEncryptedTx(ctx context.Context, tx types.Transaction, from *common.A
 
 	opts.Value = big.NewInt(0).Sub(tx.Cost(), tx.Value())
 
-	contractInfo, err := test.GetContractData()
-	if err != nil {
-		log.Fatal("can not get contract info")
-	}
-	sequencerContract, err := sequencerBindings.NewSequencer(contractInfo["Sequencer"], client)
+	sequencerContract, err := sequencerBindings.NewSequencer(common.HexToAddress(SEQUENCER_CONTRACT_ADDRESS), client)
 
 	encryptedTx, eon, identityPrefix := encrypt(ctx, client, tx, pk)
 
@@ -114,7 +112,7 @@ func submitEncryptedTx(ctx context.Context, tx types.Transaction, from *common.A
 	if err != nil {
 		log.Fatal("Could not submit", err)
 	}
-	log.Println("Sent tx with hash", tx.Hash().Bytes(), "Encrypted tx hash", submitTx.Hash().Bytes())
+	log.Println("Sent tx with hash", tx.Hash().Hex(), "Encrypted tx hash", submitTx.Hash().Hex())
 	_, err = bind.WaitMined(ctx, client, submitTx)
 	if err != nil {
 		log.Fatal("error on WaitMined", err)
@@ -145,6 +143,7 @@ func transact() {
 
 	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 	nonce, err := client.PendingNonceAt(context.Background(), fromAddress)
+	log.Println("Current nonce is", nonce)
 	if err != nil {
 		log.Fatal(err)
 	}
