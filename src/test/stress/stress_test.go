@@ -3,19 +3,124 @@ package stress
 import (
 	"context"
 	"crypto/ecdsa"
+	cryptorand "crypto/rand"
 	"fmt"
 	"log"
 	"math/big"
 	"os"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/shutter-network/encrypting-rpc-server/rpc"
+	"github.com/shutter-network/encrypting-rpc-server/test"
+	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
+	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
+	"github.com/shutter-network/shutter/shlib/shcrypto"
 )
 
 const SEQUENCER_CONTRACT_ADDRESS = "0xd073BD5A717Dce1832890f2Fdd9F4fBC4555e41A"
+const KeyperSetChangeLookAhead = 2
+
+func encrypt(ctx context.Context, client *ethclient.Client, tx types.Transaction, pk *ecdsa.PrivateKey) (*shcrypto.EncryptedMessage, uint64, shcrypto.Block) {
+	blockNumber, err := client.BlockNumber(ctx)
+	if err != nil {
+		log.Fatal("could not query blockNumber", err)
+	}
+
+	contractInfo, err := test.GetContractData()
+	if err != nil {
+		log.Fatal("can not get contract info", err)
+	}
+
+	keyperSetManagerContract, err := shopContractBindings.NewKeyperSetManager(contractInfo["KeyperSetManager"], client)
+	if err != nil {
+		log.Fatal("can not get KeyperSetManager", err)
+	}
+	eon, err := keyperSetManagerContract.GetKeyperSetIndexByBlock(nil, blockNumber+uint64(KeyperSetChangeLookAhead))
+	if err != nil {
+		log.Fatal("could not get eon", err)
+	}
+
+	keyBroadcastContract, err := shopContractBindings.NewKeyBroadcastContract(contractInfo["KeyBroadcastContract"], client)
+	if err != nil {
+		log.Fatal("can not get KeyBrodcastContract", err)
+	}
+
+	eonKeyBytes, err := keyBroadcastContract.GetEonKey(nil, eon)
+	if err != nil {
+		log.Fatal("could not get eonKeyBytes", err)
+	}
+
+	eonKey := &shcrypto.EonPublicKey{}
+	if err := eonKey.Unmarshal(eonKeyBytes); err != nil {
+		log.Fatal("could not unmarshal eonKeyBytes", err)
+	}
+
+	sigma, err := shcrypto.RandomSigma(cryptorand.Reader)
+	if err != nil {
+		log.Fatal("could not get sigma bytes", err)
+	}
+
+	chainId, err := client.ChainID(ctx)
+	if err != nil {
+		log.Fatal("could not get ChainId", err)
+	}
+
+	newSigner, err := bind.NewKeyedTransactorWithChainID(pk, chainId)
+	if err != nil {
+		log.Fatal("could not get signer", err)
+	}
+
+	identityPrefix, err := shcrypto.RandomSigma(cryptorand.Reader)
+	if err != nil {
+		log.Fatal("could not get random identityPrefix", err)
+	}
+	identity := rpc.ComputeIdentity(identityPrefix[:], newSigner.From)
+	b, err := tx.MarshalJSON()
+	encryptedTx := shcrypto.Encrypt(b, eonKey, identity, sigma)
+	return encryptedTx, eon, identityPrefix
+}
+
+func submitEncryptedTx(ctx context.Context, tx types.Transaction, from *common.Address, pk *ecdsa.PrivateKey, client *ethclient.Client) {
+	chainId, err := client.ChainID(ctx)
+	if err != nil {
+		log.Fatal("failed retrieve chainId", err)
+	}
+	newSigner, err := bind.NewKeyedTransactorWithChainID(pk, chainId)
+	if err != nil {
+		log.Fatal("failed to create signer", err)
+	}
+
+	opts := bind.TransactOpts{
+		From:   *from,
+		Signer: newSigner.Signer,
+	}
+
+	opts.Value = big.NewInt(0).Sub(tx.Cost(), tx.Value())
+
+	contractInfo, err := test.GetContractData()
+	if err != nil {
+		log.Fatal("can not get contract info")
+	}
+	sequencerContract, err := sequencerBindings.NewSequencer(contractInfo["Sequencer"], client)
+
+	encryptedTx, eon, identityPrefix := encrypt(ctx, client, tx, pk)
+
+	submitTx, err := sequencerContract.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
+	if err != nil {
+		log.Fatal("Could not submit", err)
+	}
+	log.Println("Sent tx with hash", tx.Hash().Bytes(), "Encrypted tx hash", submitTx.Hash().Bytes())
+	_, err = bind.WaitMined(ctx, client, submitTx)
+	if err != nil {
+		log.Fatal("error on WaitMined", err)
+	}
+
+}
 
 func transact() {
 	client, err := ethclient.Dial("https://rpc.chiado.gnosis.gateway.fm")
@@ -44,7 +149,7 @@ func transact() {
 		log.Fatal(err)
 	}
 
-	value := big.NewInt(1)    // in wei (1 eth)
+	value := big.NewInt(1)    // in wei
 	gasLimit := uint64(21000) // in units
 	gasPrice, err := client.SuggestGasPrice(context.Background())
 	if err != nil {
@@ -64,6 +169,8 @@ func transact() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	submitEncryptedTx(context.Background(), *signedTx, &fromAddress, privateKey, client)
 
 	err = client.SendTransaction(context.Background(), signedTx)
 	if err != nil {
