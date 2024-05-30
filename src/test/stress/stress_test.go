@@ -111,40 +111,48 @@ func createSetup() (StressSetup, error) {
 	return *setup, nil
 }
 
-func encrypt(ctx context.Context, tx types.Transaction, setup StressSetup) (*shcrypto.EncryptedMessage, uint64, shcrypto.Block) {
+func getEonKey(ctx context.Context, setup StressSetup) (uint64, *shcrypto.EonPublicKey, error) {
 	blockNumber, err := setup.Client.BlockNumber(ctx)
 	if err != nil {
-		log.Fatal("could not query blockNumber", err)
+		return 0, nil, fmt.Errorf("could not query blockNumber %v", err)
 	}
 
 	eon, err := setup.KeyperSetManager.GetKeyperSetIndexByBlock(nil, blockNumber+uint64(KeyperSetChangeLookAhead))
 	if err != nil {
-		log.Fatal("could not get eon", err)
+		return 0, nil, fmt.Errorf("could not get eon %v", err)
 	}
 
 	eonKeyBytes, err := setup.KeyBroadcastContract.GetEonKey(nil, eon)
 	if err != nil {
-		log.Fatal("could not get eonKeyBytes", err)
+		return 0, nil, fmt.Errorf("could not get eonKeyBytes %v", err)
 	}
 
 	eonKey := &shcrypto.EonPublicKey{}
 	if err := eonKey.Unmarshal(eonKeyBytes); err != nil {
-		log.Fatal("could not unmarshal eonKeyBytes", err)
+		return 0, nil, fmt.Errorf("could not unmarshal eonKeyBytes %v", err)
 	}
+	return eon, eonKey, nil
+
+}
+
+func encrypt(ctx context.Context, tx types.Transaction, eonKey shcrypto.EonPublicKey, setup StressSetup) (*shcrypto.EncryptedMessage, shcrypto.Block, error) {
 
 	sigma, err := shcrypto.RandomSigma(cryptorand.Reader)
 	if err != nil {
-		log.Fatal("could not get sigma bytes", err)
+		return nil, shcrypto.Block{}, fmt.Errorf("could not get sigma bytes %s", err)
 	}
 
 	identityPrefix, err := shcrypto.RandomSigma(cryptorand.Reader)
 	if err != nil {
-		log.Fatal("could not get random identityPrefix", err)
+		return nil, shcrypto.Block{}, fmt.Errorf("could not get random identityPrefix %v", err)
 	}
 	identity := rpc.ComputeIdentity(identityPrefix[:], setup.FromAddress)
 	b, err := tx.MarshalJSON()
-	encryptedTx := shcrypto.Encrypt(b, eonKey, identity, sigma)
-	return encryptedTx, eon, identityPrefix
+	if err != nil {
+		return nil, identityPrefix, fmt.Errorf("failed to marshal tx %v", err)
+	}
+	encryptedTx := shcrypto.Encrypt(b, &eonKey, identity, sigma)
+	return encryptedTx, identityPrefix, nil
 }
 
 func submitEncryptedTx(ctx context.Context, setup StressSetup, tx types.Transaction) {
@@ -156,7 +164,14 @@ func submitEncryptedTx(ctx context.Context, setup StressSetup, tx types.Transact
 
 	opts.Value = big.NewInt(0).Sub(tx.Cost(), tx.Value())
 
-	encryptedTx, eon, identityPrefix := encrypt(ctx, tx, setup)
+	eon, eonKey, err := getEonKey(ctx, setup)
+	if err != nil {
+		log.Fatal("could not get eonKey", err)
+	}
+	encryptedTx, identityPrefix, err := encrypt(ctx, tx, *eonKey, setup)
+	if err != nil {
+		log.Fatal("could not encrypt", err)
+	}
 
 	// TODO: set opts.Nonce !
 	submitTx, err := setup.Sequencer.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
