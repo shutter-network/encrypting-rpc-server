@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	cryptorand "crypto/rand"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -32,27 +33,96 @@ const KEYPER_SET_MANAGER_CONTRACT_ADDRESS = "0x7Fbc29C682f59f809583bFEE0fc50F1e4
 
 const KeyperSetChangeLookAhead = 2
 
-func encrypt(ctx context.Context, client *ethclient.Client, tx types.Transaction, pk *ecdsa.PrivateKey) (*shcrypto.EncryptedMessage, uint64, shcrypto.Block) {
-	blockNumber, err := client.BlockNumber(ctx)
+type StressSetup struct {
+	Client               *ethclient.Client
+	Signer               types.EIP155Signer
+	Sign                 bind.SignerFn
+	PrivateKey           *ecdsa.PrivateKey
+	FromAddress          common.Address
+	Sequencer            sequencerBindings.Sequencer
+	KeyperSetManager     shopContractBindings.KeyperSetManager
+	KeyBroadcastContract shopContractBindings.KeyBroadcastContract
+}
+
+func createSetup() (StressSetup, error) {
+	setup := new(StressSetup)
+	client, err := ethclient.Dial("https://rpc.chiado.gnosis.gateway.fm")
 	if err != nil {
-		log.Fatal("could not query blockNumber", err)
+		return *setup, fmt.Errorf("could not create client %v", err)
+	}
+
+	keyHex := os.Getenv("STRESS_TEST_PK")
+	if len(keyHex) < 64 {
+		return *setup, errors.New("private key hex must be in environment variable STRESS_TEST_PK")
+	}
+	privateKey, err := crypto.HexToECDSA(keyHex)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	publicKey := privateKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		return *setup, errors.New("error casting public key to ECDSA")
+	}
+
+	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
+
+	chainID, err := client.NetworkID(context.Background())
+	if err != nil {
+		return *setup, fmt.Errorf("could not query chainId %v", err)
 	}
 
 	keyperSetManagerContract, err := shopContractBindings.NewKeyperSetManager(common.HexToAddress(KEYPER_SET_MANAGER_CONTRACT_ADDRESS), client)
 	if err != nil {
-		log.Fatal("can not get KeyperSetManager", err)
+		return *setup, fmt.Errorf("can not get KeyperSetManager %v", err)
 	}
-	eon, err := keyperSetManagerContract.GetKeyperSetIndexByBlock(nil, blockNumber+uint64(KeyperSetChangeLookAhead))
+	setup.KeyperSetManager = *keyperSetManagerContract
+
+	keyBroadcastContract, err := shopContractBindings.NewKeyBroadcastContract(common.HexToAddress(KEY_BROADCAST_CONTRACT_ADDRESS), client)
+	if err != nil {
+		return *setup, fmt.Errorf("can not get KeyBrodcastContract %v", err)
+	}
+
+	setup.KeyBroadcastContract = *keyBroadcastContract
+
+	sequencerContract, err := sequencerBindings.NewSequencer(common.HexToAddress(SEQUENCER_CONTRACT_ADDRESS), client)
+	if err != nil {
+		return *setup, fmt.Errorf("can not get SequencerContract %v", err)
+	}
+
+	setup.Sequencer = *sequencerContract
+
+	signerForChain := types.LatestSignerForChainID(chainID)
+	setup.Client = client
+	setup.Sign = func(address common.Address, tx *types.Transaction) (*types.Transaction, error) {
+		if address != fromAddress {
+			return nil, errors.New("Not Authorized")
+		}
+		signature, err := crypto.Sign(signerForChain.Hash(tx).Bytes(), privateKey)
+		if err != nil {
+			return nil, err
+		}
+		return tx.WithSignature(signerForChain, signature)
+	}
+	setup.PrivateKey = privateKey
+	setup.FromAddress = fromAddress
+
+	return *setup, nil
+}
+
+func encrypt(ctx context.Context, tx types.Transaction, setup StressSetup) (*shcrypto.EncryptedMessage, uint64, shcrypto.Block) {
+	blockNumber, err := setup.Client.BlockNumber(ctx)
+	if err != nil {
+		log.Fatal("could not query blockNumber", err)
+	}
+
+	eon, err := setup.KeyperSetManager.GetKeyperSetIndexByBlock(nil, blockNumber+uint64(KeyperSetChangeLookAhead))
 	if err != nil {
 		log.Fatal("could not get eon", err)
 	}
 
-	keyBroadcastContract, err := shopContractBindings.NewKeyBroadcastContract(common.HexToAddress(KEY_BROADCAST_CONTRACT_ADDRESS), client)
-	if err != nil {
-		log.Fatal("can not get KeyBrodcastContract", err)
-	}
-
-	eonKeyBytes, err := keyBroadcastContract.GetEonKey(nil, eon)
+	eonKeyBytes, err := setup.KeyBroadcastContract.GetEonKey(nil, eon)
 	if err != nil {
 		log.Fatal("could not get eonKeyBytes", err)
 	}
@@ -67,83 +137,43 @@ func encrypt(ctx context.Context, client *ethclient.Client, tx types.Transaction
 		log.Fatal("could not get sigma bytes", err)
 	}
 
-	chainId, err := client.ChainID(ctx)
-	if err != nil {
-		log.Fatal("could not get ChainId", err)
-	}
-
-	newSigner, err := bind.NewKeyedTransactorWithChainID(pk, chainId)
-	if err != nil {
-		log.Fatal("could not get signer", err)
-	}
-
 	identityPrefix, err := shcrypto.RandomSigma(cryptorand.Reader)
 	if err != nil {
 		log.Fatal("could not get random identityPrefix", err)
 	}
-	identity := rpc.ComputeIdentity(identityPrefix[:], newSigner.From)
+	identity := rpc.ComputeIdentity(identityPrefix[:], setup.FromAddress)
 	b, err := tx.MarshalJSON()
 	encryptedTx := shcrypto.Encrypt(b, eonKey, identity, sigma)
 	return encryptedTx, eon, identityPrefix
 }
 
-func submitEncryptedTx(ctx context.Context, tx types.Transaction, from *common.Address, pk *ecdsa.PrivateKey, client *ethclient.Client) {
-	chainId, err := client.ChainID(ctx)
-	if err != nil {
-		log.Fatal("failed retrieve chainId", err)
-	}
-	newSigner, err := bind.NewKeyedTransactorWithChainID(pk, chainId)
-	if err != nil {
-		log.Fatal("failed to create signer", err)
-	}
+func submitEncryptedTx(ctx context.Context, setup StressSetup, tx types.Transaction) {
 
 	opts := bind.TransactOpts{
-		From:   *from,
-		Signer: newSigner.Signer,
+		From:   setup.FromAddress,
+		Signer: setup.Sign,
 	}
 
 	opts.Value = big.NewInt(0).Sub(tx.Cost(), tx.Value())
 
-	sequencerContract, err := sequencerBindings.NewSequencer(common.HexToAddress(SEQUENCER_CONTRACT_ADDRESS), client)
-
-	encryptedTx, eon, identityPrefix := encrypt(ctx, client, tx, pk)
+	encryptedTx, eon, identityPrefix := encrypt(ctx, tx, setup)
 
 	// TODO: set opts.Nonce !
-	submitTx, err := sequencerContract.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
+	submitTx, err := setup.Sequencer.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
 	if err != nil {
 		log.Fatal("Could not submit", err)
 	}
 	log.Println("Sent tx with hash", tx.Hash().Hex(), "Encrypted tx hash", submitTx.Hash().Hex())
-	_, err = bind.WaitMined(ctx, client, submitTx)
+	_, err = bind.WaitMined(ctx, setup.Client, submitTx)
 	if err != nil {
 		log.Fatal("error on WaitMined", err)
 	}
 
 }
 
-func transact() {
-	client, err := ethclient.Dial("https://rpc.chiado.gnosis.gateway.fm")
-	if err != nil {
-		log.Fatal(err)
-	}
+func transact(setup StressSetup) {
 
-	keyHex := os.Getenv("STRESS_TEST_PK")
-	if len(keyHex) < 64 {
-		log.Fatal("private key hex must be in environment variable STRESS_TEST_PK")
-	}
-	privateKey, err := crypto.HexToECDSA(keyHex)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	publicKey := privateKey.Public()
-	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
-	if !ok {
-		log.Fatal("error casting public key to ECDSA")
-	}
-
-	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
-	nonce, err := client.PendingNonceAt(context.Background(), fromAddress)
+	nonce, err := setup.Client.PendingNonceAt(context.Background(), setup.FromAddress)
 	log.Println("Current nonce is", nonce)
 	if err != nil {
 		log.Fatal(err)
@@ -151,7 +181,7 @@ func transact() {
 
 	value := big.NewInt(1)    // in wei
 	gasLimit := uint64(21000) // in units
-	gasPrice, err := client.SuggestGasPrice(context.Background())
+	gasPrice, err := setup.Client.SuggestGasPrice(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -160,19 +190,15 @@ func transact() {
 	var data []byte
 	tx := types.NewTransaction(nonce+1, toAddress, value, gasLimit, gasPrice, data)
 
-	chainID, err := client.NetworkID(context.Background())
+	//signedTx, err := types.SignTx(tx, signer.Signer, signer.PrivateKey)
+	signedTx, err := setup.Sign(setup.FromAddress, tx)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
-	if err != nil {
-		log.Fatal(err)
-	}
+	submitEncryptedTx(context.Background(), setup, *signedTx)
 
-	submitEncryptedTx(context.Background(), *signedTx, &fromAddress, privateKey, client)
-
-	err = client.SendTransaction(context.Background(), signedTx)
+	err = setup.Client.SendTransaction(context.Background(), signedTx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -180,9 +206,17 @@ func transact() {
 	fmt.Printf("tx sent: %s\n", signedTx.Hash().Hex())
 }
 
+func transactWithOpts(innerOpts bind.TransactOpts, outerOpts bind.TransactOpts, signer StressSetup) {
+
+}
+
 func TestStress(t *testing.T) {
 	fmt.Println("Hello, World!")
-	transact()
+	signer, err := createSetup()
+	if err != nil {
+		log.Fatal("could not create setup", err)
+	}
+	transact(signer)
 	fmt.Println("transacted")
 }
 
