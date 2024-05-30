@@ -240,11 +240,13 @@ func transact(setup StressSetup) {
 		env.Opts.Nonce = big.NewInt(0).Add(env.StartingNonce, big.NewInt(int64(i)))
 		submitEncryptedTx(context.Background(), setup, env, *signedTx)
 
-		err = setup.Client.SendTransaction(context.Background(), signedTx)
-		if err != nil {
-			log.Fatal(err)
-		}
+		/*
+			err = setup.Client.SendTransaction(context.Background(), signedTx)
 
+			if err != nil {
+				log.Fatal(err)
+			}
+		*/
 		fmt.Printf("tx sent: %s\n", signedTx.Hash().Hex())
 	}
 
