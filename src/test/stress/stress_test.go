@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	cryptorand "crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -140,6 +141,7 @@ func createStressEnvironment(ctx context.Context, setup StressSetup) (StressEnvi
 		return environment, fmt.Errorf("could not query starting nonce %v", err)
 	}
 	environment.StartingNonce = big.NewInt(int64(nonce))
+	log.Println("eon is ", eon)
 	return environment, nil
 }
 
@@ -179,6 +181,9 @@ func encrypt(ctx context.Context, tx types.Transaction, env StressEnvironment, s
 		return nil, shcrypto.Block{}, fmt.Errorf("could not get random identityPrefix %v", err)
 	}
 	identity := rpc.ComputeIdentity(identityPrefix[:], setup.FromAddress)
+	identityMarshal := identity.Marshal()
+
+	log.Print("creating Identity ", hex.EncodeToString(identityMarshal))
 	b, err := tx.MarshalJSON()
 	if err != nil {
 		return nil, identityPrefix, fmt.Errorf("failed to marshal tx %v", err)
@@ -202,6 +207,8 @@ func submitEncryptedTx(ctx context.Context, setup StressSetup, env StressEnviron
 	if err != nil {
 		return nil, fmt.Errorf("Could not submit %s", err)
 	}
+	identityHex, _ := identityPrefix.MarshalText()
+	log.Println("submitted identityPrefix ", hex.EncodeToString(identityHex))
 	return submitTx, nil
 
 }
@@ -263,21 +270,10 @@ func transact(setup StressSetup) {
 
 func TestStress(t *testing.T) {
 	fmt.Println("Hello, World!")
-	signer, err := createSetup()
+	setup, err := createSetup()
 	if err != nil {
 		log.Fatal("could not create setup", err)
 	}
-	transact(signer)
+	transact(setup)
 	fmt.Println("transacted")
 }
-
-/* TODO:
-
-- transact batches
-- plan nonces: for i in len(batch)
-  - submit nonces = latest nonce + i
-  - encrypted nonces = latest nonce + len(batch) + i
-
-- collect tx hashes, wait for mined only after batch is submitted
-
-*/
