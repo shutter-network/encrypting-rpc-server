@@ -33,6 +33,7 @@ const KEYPER_SET_MANAGER_CONTRACT_ADDRESS = "0x7Fbc29C682f59f809583bFEE0fc50F1e4
 
 const KeyperSetChangeLookAhead = 2
 
+// contains all the setup required to interact with the chain
 type StressSetup struct {
 	Client               *ethclient.Client
 	Signer               types.EIP155Signer
@@ -111,6 +112,37 @@ func createSetup() (StressSetup, error) {
 	return *setup, nil
 }
 
+// contains the context for the current stress test to create transactions
+type StressEnvironment struct {
+	Opts          bind.TransactOpts
+	StartingNonce *big.Int
+	Eon           uint64
+	EonPublicKey  *shcrypto.EonPublicKey
+}
+
+func createStressEnvironment(ctx context.Context, setup StressSetup) (StressEnvironment, error) {
+	eon, eonKey, err := getEonKey(ctx, setup)
+
+	environment := StressEnvironment{
+		Opts: bind.TransactOpts{
+			From:   setup.FromAddress,
+			Signer: setup.Sign,
+		},
+		Eon:          eon,
+		EonPublicKey: eonKey,
+	}
+	if err != nil {
+		return environment, fmt.Errorf("could not get eonKey %v", err)
+	}
+	nonce, err := setup.Client.PendingNonceAt(context.Background(), setup.FromAddress)
+	log.Println("Current nonce is", nonce)
+	if err != nil {
+		return environment, fmt.Errorf("could not query starting nonce %v", err)
+	}
+	environment.StartingNonce = big.NewInt(int64(nonce))
+	return environment, nil
+}
+
 func getEonKey(ctx context.Context, setup StressSetup) (uint64, *shcrypto.EonPublicKey, error) {
 	blockNumber, err := setup.Client.BlockNumber(ctx)
 	if err != nil {
@@ -135,7 +167,7 @@ func getEonKey(ctx context.Context, setup StressSetup) (uint64, *shcrypto.EonPub
 
 }
 
-func encrypt(ctx context.Context, tx types.Transaction, eonKey shcrypto.EonPublicKey, setup StressSetup) (*shcrypto.EncryptedMessage, shcrypto.Block, error) {
+func encrypt(ctx context.Context, tx types.Transaction, env StressEnvironment, setup StressSetup) (*shcrypto.EncryptedMessage, shcrypto.Block, error) {
 
 	sigma, err := shcrypto.RandomSigma(cryptorand.Reader)
 	if err != nil {
@@ -151,30 +183,22 @@ func encrypt(ctx context.Context, tx types.Transaction, eonKey shcrypto.EonPubli
 	if err != nil {
 		return nil, identityPrefix, fmt.Errorf("failed to marshal tx %v", err)
 	}
-	encryptedTx := shcrypto.Encrypt(b, &eonKey, identity, sigma)
+	encryptedTx := shcrypto.Encrypt(b, (*shcrypto.EonPublicKey)(env.EonPublicKey), identity, sigma)
 	return encryptedTx, identityPrefix, nil
 }
 
-func submitEncryptedTx(ctx context.Context, setup StressSetup, tx types.Transaction) {
+func submitEncryptedTx(ctx context.Context, setup StressSetup, env StressEnvironment, tx types.Transaction) {
 
-	opts := bind.TransactOpts{
-		From:   setup.FromAddress,
-		Signer: setup.Sign,
-	}
+	opts := env.Opts
 
 	opts.Value = big.NewInt(0).Sub(tx.Cost(), tx.Value())
 
-	eon, eonKey, err := getEonKey(ctx, setup)
-	if err != nil {
-		log.Fatal("could not get eonKey", err)
-	}
-	encryptedTx, identityPrefix, err := encrypt(ctx, tx, *eonKey, setup)
+	encryptedTx, identityPrefix, err := encrypt(ctx, tx, env, setup)
 	if err != nil {
 		log.Fatal("could not encrypt", err)
 	}
 
-	// TODO: set opts.Nonce !
-	submitTx, err := setup.Sequencer.SubmitEncryptedTransaction(&opts, eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
+	submitTx, err := setup.Sequencer.SubmitEncryptedTransaction(&opts, env.Eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
 	if err != nil {
 		log.Fatal("Could not submit", err)
 	}
@@ -188,8 +212,7 @@ func submitEncryptedTx(ctx context.Context, setup StressSetup, tx types.Transact
 
 func transact(setup StressSetup) {
 
-	nonce, err := setup.Client.PendingNonceAt(context.Background(), setup.FromAddress)
-	log.Println("Current nonce is", nonce)
+	env, err := createStressEnvironment(context.Background(), setup)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -203,25 +226,27 @@ func transact(setup StressSetup) {
 
 	toAddress := common.HexToAddress("0xF1fc0e5B6C5E42639d27ab4f2860e964de159bB4")
 	var data []byte
-	tx := types.NewTransaction(nonce+1, toAddress, value, gasLimit, gasPrice, data)
+	var count = 2
+	for i := 0; i < count; i++ {
 
-	//signedTx, err := types.SignTx(tx, signer.Signer, signer.PrivateKey)
-	signedTx, err := setup.Sign(setup.FromAddress, tx)
-	if err != nil {
-		log.Fatal(err)
+		innerNonce := env.StartingNonce.Uint64() + uint64(count) + uint64(i)
+		tx := types.NewTransaction(innerNonce, toAddress, value, gasLimit, gasPrice, data)
+
+		signedTx, err := setup.Sign(setup.FromAddress, tx)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		env.Opts.Nonce = big.NewInt(0).Add(env.StartingNonce, big.NewInt(int64(i)))
+		submitEncryptedTx(context.Background(), setup, env, *signedTx)
+
+		err = setup.Client.SendTransaction(context.Background(), signedTx)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Printf("tx sent: %s\n", signedTx.Hash().Hex())
 	}
-
-	submitEncryptedTx(context.Background(), setup, *signedTx)
-
-	err = setup.Client.SendTransaction(context.Background(), signedTx)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Printf("tx sent: %s\n", signedTx.Hash().Hex())
-}
-
-func transactWithOpts(innerOpts bind.TransactOpts, outerOpts bind.TransactOpts, signer StressSetup) {
 
 }
 
