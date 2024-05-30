@@ -187,7 +187,7 @@ func encrypt(ctx context.Context, tx types.Transaction, env StressEnvironment, s
 	return encryptedTx, identityPrefix, nil
 }
 
-func submitEncryptedTx(ctx context.Context, setup StressSetup, env StressEnvironment, tx types.Transaction) {
+func submitEncryptedTx(ctx context.Context, setup StressSetup, env StressEnvironment, tx types.Transaction) (*types.Transaction, error) {
 
 	opts := env.Opts
 
@@ -195,18 +195,14 @@ func submitEncryptedTx(ctx context.Context, setup StressSetup, env StressEnviron
 
 	encryptedTx, identityPrefix, err := encrypt(ctx, tx, env, setup)
 	if err != nil {
-		log.Fatal("could not encrypt", err)
+		return nil, fmt.Errorf("could not encrypt %v", err)
 	}
 
 	submitTx, err := setup.Sequencer.SubmitEncryptedTransaction(&opts, env.Eon, identityPrefix, encryptedTx.Marshal(), new(big.Int).SetUint64(tx.Gas()))
 	if err != nil {
-		log.Fatal("Could not submit", err)
+		return nil, fmt.Errorf("Could not submit %s", err)
 	}
-	log.Println("Sent tx with hash", tx.Hash().Hex(), "Encrypted tx hash", submitTx.Hash().Hex())
-	_, err = bind.WaitMined(ctx, setup.Client, submitTx)
-	if err != nil {
-		log.Fatal("error on WaitMined", err)
-	}
+	return submitTx, nil
 
 }
 
@@ -227,6 +223,8 @@ func transact(setup StressSetup) {
 	toAddress := common.HexToAddress("0xF1fc0e5B6C5E42639d27ab4f2860e964de159bB4")
 	var data []byte
 	var count = 2
+	var submissions []types.Transaction
+	var innerTxs []types.Transaction
 	for i := 0; i < count; i++ {
 
 		innerNonce := env.StartingNonce.Uint64() + uint64(count) + uint64(i)
@@ -236,20 +234,31 @@ func transact(setup StressSetup) {
 		if err != nil {
 			log.Fatal(err)
 		}
-
+		innerTxs = append(innerTxs, *signedTx)
 		env.Opts.Nonce = big.NewInt(0).Add(env.StartingNonce, big.NewInt(int64(i)))
-		submitEncryptedTx(context.Background(), setup, env, *signedTx)
-
-		/*
-			err = setup.Client.SendTransaction(context.Background(), signedTx)
-
-			if err != nil {
-				log.Fatal(err)
-			}
-		*/
-		fmt.Printf("tx sent: %s\n", signedTx.Hash().Hex())
+		submitTx, err := submitEncryptedTx(context.Background(), setup, env, *signedTx)
+		if err != nil {
+			log.Fatal(err)
+		}
+		submissions = append(submissions, *submitTx)
+		log.Println("Sent tx with hash", submitTx.Hash().Hex(), "Encrypted tx hash", signedTx.Hash().Hex(), "Original tx hash", tx.Hash().Hex())
 	}
+	for _, submitTx := range submissions {
+		log.Println("waiting for submission ", submitTx.Hash().Hex())
 
+		_, err = bind.WaitMined(context.Background(), setup.Client, &submitTx)
+		if err != nil {
+			log.Fatal("error on WaitMined", err)
+		}
+	}
+	for _, innerTx := range innerTxs {
+		log.Println("waiting for inclusion ", innerTx.Hash().Hex())
+
+		_, err = bind.WaitMined(context.Background(), setup.Client, &innerTx)
+		if err != nil {
+			log.Fatal("error on WaitMined", err)
+		}
+	}
 }
 
 func TestStress(t *testing.T) {
