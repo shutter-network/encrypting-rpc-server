@@ -183,11 +183,15 @@ func encrypt(ctx context.Context, tx types.Transaction, env StressEnvironment, s
 	identity := rpc.ComputeIdentity(identityPrefix[:], setup.FromAddress)
 	identityMarshal := identity.Marshal()
 
-	log.Print("creating Identity ", hex.EncodeToString(identityMarshal))
+	log.Println("creating Identity ", hex.EncodeToString(identityMarshal))
+	log.Println("nonce before encryption", tx.Nonce())
 	b, err := tx.MarshalJSON()
 	if err != nil {
 		return nil, identityPrefix, fmt.Errorf("failed to marshal tx %v", err)
 	}
+
+	log.Println("json tx", string(b[:]))
+
 	encryptedTx := shcrypto.Encrypt(b, (*shcrypto.EonPublicKey)(env.EonPublicKey), identity, sigma)
 	return encryptedTx, identityPrefix, nil
 }
@@ -207,13 +211,12 @@ func submitEncryptedTx(ctx context.Context, setup StressSetup, env StressEnviron
 	if err != nil {
 		return nil, fmt.Errorf("Could not submit %s", err)
 	}
-	identityHex, _ := identityPrefix.MarshalText()
-	log.Println("submitted identityPrefix ", hex.EncodeToString(identityHex))
+	log.Println("submitted identityPrefix ", hex.EncodeToString(identityPrefix[:]))
 	return submitTx, nil
 
 }
 
-func transact(setup StressSetup) {
+func transact(setup StressSetup, count int) {
 
 	env, err := createStressEnvironment(context.Background(), setup)
 	if err != nil {
@@ -226,10 +229,11 @@ func transact(setup StressSetup) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// Add 5% gasPrice margin
+	gasPrice = big.NewInt(0).Add(gasPrice, big.NewInt(int64(float64(gasPrice.Int64())*1.05)))
 
 	toAddress := common.HexToAddress("0xF1fc0e5B6C5E42639d27ab4f2860e964de159bB4")
 	var data []byte
-	var count = 2
 	var submissions []types.Transaction
 	var innerTxs []types.Transaction
 	for i := 0; i < count; i++ {
@@ -243,6 +247,7 @@ func transact(setup StressSetup) {
 		}
 		innerTxs = append(innerTxs, *signedTx)
 		env.Opts.Nonce = big.NewInt(0).Add(env.StartingNonce, big.NewInt(int64(i)))
+		log.Println("new nonce is", env.Opts.Nonce, "innerNonce is", signedTx.Nonce())
 		submitTx, err := submitEncryptedTx(context.Background(), setup, env, *signedTx)
 		if err != nil {
 			log.Fatal(err)
@@ -274,6 +279,6 @@ func TestStress(t *testing.T) {
 	if err != nil {
 		log.Fatal("could not create setup", err)
 	}
-	transact(setup)
+	transact(setup, 1)
 	fmt.Println("transacted")
 }
