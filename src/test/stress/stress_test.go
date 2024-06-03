@@ -1,6 +1,7 @@
 package stress
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	cryptorand "crypto/rand"
@@ -270,14 +271,14 @@ func encrypt(ctx context.Context, tx types.Transaction, env StressEnvironment, s
 
 	log.Println("creating Identity ", hex.EncodeToString(identityMarshal))
 	log.Println("nonce before encryption", tx.Nonce())
-	b, err := tx.MarshalJSON()
+	var buff bytes.Buffer
+	tx.EncodeRLP(&buff)
+
 	if err != nil {
 		return nil, identityPrefix, fmt.Errorf("failed to marshal tx %v", err)
 	}
 
-	log.Println("json tx", string(b[:]))
-
-	encryptedTx := shcrypto.Encrypt(b, (*shcrypto.EonPublicKey)(env.EonPublicKey), identity, sigma)
+	encryptedTx := shcrypto.Encrypt(buff.Bytes(), (*shcrypto.EonPublicKey)(env.EonPublicKey), identity, sigma)
 	return encryptedTx, identityPrefix, nil
 }
 
@@ -341,8 +342,6 @@ func transact(setup StressSetup, count int) {
 				Value:     value,
 				Data:      data,
 			},
-
-		//	innerNonce, toAddress, value, gasLimit, gasPrice, data
 		)
 
 		signedTx, err := setup.TransactSign(setup.TransactFromAddress, tx)
