@@ -193,6 +193,7 @@ type StressEnvironment struct {
 	SubmitStartingNonce   *big.Int
 	Eon                   uint64
 	EonPublicKey          *shcrypto.EonPublicKey
+	WaitOnEverySubmit     bool
 }
 
 func createStressEnvironment(ctx context.Context, setup StressSetup) (StressEnvironment, error) {
@@ -277,7 +278,8 @@ func encrypt(ctx context.Context, tx types.Transaction, env StressEnvironment, s
 	if err != nil {
 		return nil, identityPrefix, fmt.Errorf("failed to marshal tx %v", err)
 	}
-
+	j, err := tx.MarshalJSON()
+	log.Println("tx to be encrypted", string(j[:]))
 	encryptedTx := shcrypto.Encrypt(buff.Bytes(), (*shcrypto.EonPublicKey)(env.EonPublicKey), identity, sigma)
 	return encryptedTx, identityPrefix, nil
 }
@@ -317,14 +319,18 @@ func transact(setup StressSetup, env StressEnvironment, count int) error {
 	}
 	suggestedGasPrice, err := setup.Client.SuggestGasPrice(context.Background())
 
-	asFloat, _ := suggestedGasPrice.Float64()
-
-	x := int64(asFloat * .15)
-	delta := big.NewInt(x)
 	feeCapAndTipCap := big.NewInt(0).Add(suggestedGasPrice, suggestedGasTipCap)
-	gasFeeCap := big.NewInt(0).Add(feeCapAndTipCap, delta)
+
+	gasFloat, _ := suggestedGasPrice.Float64()
+
 	for i := 0; i < count; i++ {
 
+		//x := int64(gasFloat * (2. / float64(count)) * float64(i+1)) // higher delta for higher nonces
+		//x := int64(gasFloat * (2. / float64(count)) * float64(count-i+1)) // lower delta for higher nonces to affect ordering
+		x := int64(gasFloat * 1.5) // fixed delta
+		log.Println("delta is ", x)
+		delta := big.NewInt(x)
+		gasFeeCap := big.NewInt(0).Add(feeCapAndTipCap, delta)
 		innerNonce := env.TransactStartingNonce.Uint64() + uint64(i)
 		tx := types.NewTx(
 			&types.DynamicFeeTx{
@@ -344,13 +350,21 @@ func transact(setup StressSetup, env StressEnvironment, count int) error {
 			return err
 		}
 		innerTxs = append(innerTxs, *signedTx)
-		env.TransacterOpts.Nonce = big.NewInt(0).Add(env.TransactStartingNonce, big.NewInt(int64(i)))
-		log.Println("new nonce is", env.TransacterOpts.Nonce, "used nonce is", signedTx.Nonce())
+		log.Println("used nonce", signedTx.Nonce())
 		submitTx, err := submitEncryptedTx(context.Background(), setup, env, *signedTx)
 		if err != nil {
 			return err
 		}
 		submissions = append(submissions, *submitTx)
+		if env.WaitOnEverySubmit {
+			receipt, err := bind.WaitMined(context.Background(), setup.Client, submitTx)
+
+			if err != nil {
+				return fmt.Errorf("submit not mined %s", submitTx.Hash().Hex())
+			} else {
+				log.Println("status", receipt.Status)
+			}
+		}
 		log.Println("Submit tx hash", submitTx.Hash().Hex(), "Encrypted tx hash", signedTx.Hash().Hex())
 	}
 	for _, submitTx := range submissions {
@@ -377,14 +391,62 @@ func transact(setup StressSetup, env StressEnvironment, count int) error {
 			return fmt.Errorf("included tx failed")
 		}
 	}
+	return nil
 }
 
-func TestStress(t *testing.T) {
-	fmt.Println("Hello, World!")
+func TestStressSingle(t *testing.T) {
 	setup, err := createSetup()
 	if err != nil {
 		log.Fatal("could not create setup", err)
 	}
-	transact(setup, 1)
+	env, err := createStressEnvironment(context.Background(), setup)
+	if err != nil {
+		log.Fatal("could not set up environment", err)
+	}
+	env.WaitOnEverySubmit = false
+	err = transact(setup, env, 1)
+	if err != nil {
+		log.Printf("failure %s", err)
+		t.Fail()
+	}
+	fmt.Println("transacted")
+}
+
+// run with `go test -test.v -timeout 3m -run TestStressDualWait`; currently fails
+func TestStressDualWait(t *testing.T) {
+	setup, err := createSetup()
+	if err != nil {
+		log.Fatal("could not create setup", err)
+	}
+	env, err := createStressEnvironment(context.Background(), setup)
+	if err != nil {
+		log.Fatal("could not set up environment", err)
+	}
+
+	env.WaitOnEverySubmit = true
+	err = transact(setup, env, 2)
+	if err != nil {
+		log.Printf("failure %s", err)
+		t.Fail()
+	}
+	fmt.Println("transacted")
+}
+
+func TestStressDualNoWait(t *testing.T) {
+	setup, err := createSetup()
+	if err != nil {
+		log.Fatal("could not create setup", err)
+	}
+	env, err := createStressEnvironment(context.Background(), setup)
+	if err != nil {
+		log.Fatal("could not set up environment", err)
+	}
+
+	env.WaitOnEverySubmit = false
+	err = transact(setup, env, 2)
+	if err != nil {
+		log.Printf("failure %s", err)
+		t.Fail()
+	}
 	fmt.Println("transacted")
 }
