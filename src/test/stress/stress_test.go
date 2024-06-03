@@ -225,21 +225,33 @@ func transact(setup StressSetup, count int) {
 
 	value := big.NewInt(1)    // in wei
 	gasLimit := uint64(21000) // in units
-	gasPrice, err := setup.Client.SuggestGasPrice(context.Background())
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Add 5% gasPrice margin
-	gasPrice = big.NewInt(0).Add(gasPrice, big.NewInt(int64(float64(gasPrice.Int64())*1.05)))
 
 	toAddress := common.HexToAddress("0xF1fc0e5B6C5E42639d27ab4f2860e964de159bB4")
 	var data []byte
 	var submissions []types.Transaction
 	var innerTxs []types.Transaction
+	suggestedGasTipCap, err := setup.Client.SuggestGasTipCap(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+	suggestedFeeCap, err := setup.Client.SuggestGasPrice(context.Background())
 	for i := 0; i < count; i++ {
 
 		innerNonce := env.StartingNonce.Uint64() + uint64(count) + uint64(i)
-		tx := types.NewTransaction(innerNonce, toAddress, value, gasLimit, gasPrice, data)
+		tx := types.NewTx(
+			&types.DynamicFeeTx{
+				ChainID:   setup.Signer.ChainID(),
+				Nonce:     innerNonce,
+				GasFeeCap: suggestedFeeCap,
+				GasTipCap: suggestedGasTipCap,
+				Gas:       gasLimit,
+				To:        &toAddress,
+				Value:     value,
+				Data:      data,
+			},
+
+		//	innerNonce, toAddress, value, gasLimit, gasPrice, data
+		)
 
 		signedTx, err := setup.Sign(setup.FromAddress, tx)
 		if err != nil {
