@@ -319,7 +319,14 @@ func transact(setup StressSetup, count int) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	suggestedFeeCap, err := setup.Client.SuggestGasPrice(context.Background())
+	suggestedGasPrice, err := setup.Client.SuggestGasPrice(context.Background())
+
+	asFloat, _ := suggestedGasPrice.Float64()
+
+	x := int64(asFloat * .15)
+	delta := big.NewInt(x)
+	feeCapAndTipCap := big.NewInt(0).Add(suggestedGasPrice, suggestedGasTipCap)
+	gasFeeCap := big.NewInt(0).Add(feeCapAndTipCap, delta)
 	for i := 0; i < count; i++ {
 
 		innerNonce := env.TransactStartingNonce.Uint64() + uint64(i)
@@ -327,7 +334,7 @@ func transact(setup StressSetup, count int) {
 			&types.DynamicFeeTx{
 				ChainID:   setup.SubmitSigner.ChainID(),
 				Nonce:     innerNonce,
-				GasFeeCap: suggestedFeeCap,
+				GasFeeCap: gasFeeCap,
 				GasTipCap: suggestedGasTipCap,
 				Gas:       gasLimit,
 				To:        &toAddress,
