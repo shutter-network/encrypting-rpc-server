@@ -73,7 +73,7 @@ func createSetup() (StressSetup, error) {
 	}
 	submitPrivateKey, err := crypto.HexToECDSA(submitKeyHex)
 	if err != nil {
-		log.Fatal(err)
+		return *setup, err
 	}
 
 	submitPublicKey := submitPrivateKey.Public()
@@ -101,7 +101,7 @@ func createSetup() (StressSetup, error) {
 	transactPrivateKeyBytes := crypto.FromECDSA(transactPrivateKey)
 
 	if err != nil {
-		log.Fatal(err)
+		return *setup, err
 	}
 
 	transactPublicKey := transactPrivateKey.Public()
@@ -116,7 +116,7 @@ func createSetup() (StressSetup, error) {
 	// this will allow us to recover funds, in case the clean up step fails
 	f, err := os.OpenFile("pk.hex", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Fatal(err)
+		return *setup, err
 	}
 	defer f.Close()
 
@@ -141,7 +141,7 @@ func createSetup() (StressSetup, error) {
 
 	err = fund(*setup)
 	if err != nil {
-		log.Fatal(err)
+		return *setup, err
 	}
 	log.Println("Funding complete")
 
@@ -302,12 +302,7 @@ func submitEncryptedTx(ctx context.Context, setup StressSetup, env StressEnviron
 
 }
 
-func transact(setup StressSetup, count int) {
-
-	env, err := createStressEnvironment(context.Background(), setup)
-	if err != nil {
-		log.Fatal(err)
-	}
+func transact(setup StressSetup, env StressEnvironment, count int) error {
 
 	value := big.NewInt(1)    // in wei
 	gasLimit := uint64(21000) // in units
@@ -318,7 +313,7 @@ func transact(setup StressSetup, count int) {
 	var innerTxs []types.Transaction
 	suggestedGasTipCap, err := setup.Client.SuggestGasTipCap(context.Background())
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	suggestedGasPrice, err := setup.Client.SuggestGasPrice(context.Background())
 
@@ -346,14 +341,14 @@ func transact(setup StressSetup, count int) {
 
 		signedTx, err := setup.TransactSign(setup.TransactFromAddress, tx)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		innerTxs = append(innerTxs, *signedTx)
 		env.TransacterOpts.Nonce = big.NewInt(0).Add(env.TransactStartingNonce, big.NewInt(int64(i)))
 		log.Println("new nonce is", env.TransacterOpts.Nonce, "used nonce is", signedTx.Nonce())
 		submitTx, err := submitEncryptedTx(context.Background(), setup, env, *signedTx)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		submissions = append(submissions, *submitTx)
 		log.Println("Submit tx hash", submitTx.Hash().Hex(), "Encrypted tx hash", signedTx.Hash().Hex())
@@ -363,19 +358,23 @@ func transact(setup StressSetup, count int) {
 
 		receipt, err := bind.WaitMined(context.Background(), setup.Client, &submitTx)
 		if err != nil {
-			log.Fatal("error on WaitMined", err)
+			return fmt.Errorf("error on WaitMined %s", err)
 		}
 		log.Println("status", receipt.Status)
 		if receipt.Status != 1 {
-			log.Fatal("submission failed")
+			return fmt.Errorf("submission failed")
 		}
 	}
 	for _, innerTx := range innerTxs {
 		log.Println("waiting for inclusion ", innerTx.Hash().Hex())
 
-		_, err = bind.WaitMined(context.Background(), setup.Client, &innerTx)
+		receipt, err := bind.WaitMined(context.Background(), setup.Client, &innerTx)
 		if err != nil {
-			log.Fatal("error on WaitMined", err)
+			return fmt.Errorf("error on WaitMined %s", err)
+		}
+		log.Println("status", receipt.Status)
+		if receipt.Status != 1 {
+			return fmt.Errorf("included tx failed")
 		}
 	}
 }
