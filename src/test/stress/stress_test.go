@@ -412,7 +412,6 @@ func TestStressSingle(t *testing.T) {
 	fmt.Println("transacted")
 }
 
-// run with `go test -test.v -timeout 3m -run TestStressDualWait`; currently fails
 func TestStressDualWait(t *testing.T) {
 	setup, err := createSetup()
 	if err != nil {
@@ -432,6 +431,7 @@ func TestStressDualWait(t *testing.T) {
 	fmt.Println("transacted")
 }
 
+// run with `go test -test.v -timeout 3m -run TestStressDualNoWait`; currently fails
 func TestStressDualNoWait(t *testing.T) {
 	setup, err := createSetup()
 	if err != nil {
