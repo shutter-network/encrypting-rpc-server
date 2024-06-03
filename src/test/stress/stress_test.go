@@ -97,6 +97,7 @@ func createSetup() (StressSetup, error) {
 	setup.SubmitPrivateKey = submitPrivateKey
 	setup.SubmitFromAddress = submitFromAddress
 
+	// TODO: allow multiple transacting accounts in StressEnvironment.TransactAccounts
 	transactPrivateKey, err := crypto.GenerateKey()
 	transactPrivateKeyBytes := crypto.FromECDSA(transactPrivateKey)
 
@@ -325,6 +326,8 @@ func transact(setup StressSetup, env StressEnvironment, count int) error {
 
 	for i := 0; i < count; i++ {
 
+		// TODO: make gas price calculation a function StressEnvironment.GasPriceFn()
+
 		//x := int64(gasFloat * (2. / float64(count)) * float64(i+1)) // higher delta for higher nonces
 		//x := int64(gasFloat * (2. / float64(count)) * float64(count-i+1)) // lower delta for higher nonces to affect ordering
 		x := int64(gasFloat * 1.5) // fixed delta
@@ -351,6 +354,7 @@ func transact(setup StressSetup, env StressEnvironment, count int) error {
 		}
 		innerTxs = append(innerTxs, *signedTx)
 		log.Println("used nonce", signedTx.Nonce())
+		// TODO: move submission to a second loop to increase throughput
 		submitTx, err := submitEncryptedTx(context.Background(), setup, env, *signedTx)
 		if err != nil {
 			return err
