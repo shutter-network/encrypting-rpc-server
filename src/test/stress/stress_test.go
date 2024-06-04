@@ -275,13 +275,14 @@ func createIdentity() (shcrypto.Block, error) {
 	return identityPrefix, nil
 }
 
-func encrypt(ctx context.Context, tx types.Transaction, env StressEnvironment, setup StressSetup) (*shcrypto.EncryptedMessage, shcrypto.Block, error) {
+func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, setup StressSetup) (*shcrypto.EncryptedMessage, shcrypto.Block, error) {
 
 	sigma, err := shcrypto.RandomSigma(cryptorand.Reader)
 	if err != nil {
 		return nil, shcrypto.Block{}, fmt.Errorf("could not get sigma bytes %s", err)
 	}
 
+	log.Println("previous prefix", hex.EncodeToString(env.PreviousPrefix[:]))
 	identityPrefix, err := createIdentity()
 
 	if err != nil {
@@ -299,7 +300,6 @@ func encrypt(ctx context.Context, tx types.Transaction, env StressEnvironment, s
 	env.PreviousPrefix = identityPrefix
 	identity := rpc.ComputeIdentity(identityPrefix[:], setup.SubmitFromAddress)
 
-	log.Println("created Identity ", hex.EncodeToString(identity.Marshal()))
 	log.Println("nonce before encryption", tx.Nonce())
 	var buff bytes.Buffer
 	tx.EncodeRLP(&buff)
@@ -313,7 +313,7 @@ func encrypt(ctx context.Context, tx types.Transaction, env StressEnvironment, s
 	return encryptedTx, identityPrefix, nil
 }
 
-func submitEncryptedTx(ctx context.Context, setup StressSetup, env StressEnvironment, tx types.Transaction) (*types.Transaction, error) {
+func submitEncryptedTx(ctx context.Context, setup StressSetup, env *StressEnvironment, tx types.Transaction) (*types.Transaction, error) {
 
 	opts := env.SubmitterOpts
 
@@ -333,7 +333,7 @@ func submitEncryptedTx(ctx context.Context, setup StressSetup, env StressEnviron
 
 }
 
-func transact(setup StressSetup, env StressEnvironment, count int) error {
+func transact(setup StressSetup, env *StressEnvironment, count int) error {
 
 	value := big.NewInt(1)    // in wei
 	gasLimit := uint64(21000) // in units
@@ -481,7 +481,7 @@ func TestStressSingle(t *testing.T) {
 	if err != nil {
 		log.Fatal("could not set up environment", err)
 	}
-	err = transact(setup, env, 1)
+	err = transact(setup, &env, 1)
 	if err != nil {
 		log.Printf("failure %s", err)
 		t.Fail()
@@ -500,7 +500,7 @@ func TestStressDualWait(t *testing.T) {
 	}
 	env.WaitOnEverySubmit = true
 
-	err = transact(setup, env, 2)
+	err = transact(setup, &env, 2)
 	if err != nil {
 		log.Printf("failure %s", err)
 		t.Fail()
@@ -519,7 +519,7 @@ func TestStressDualNoWait(t *testing.T) {
 		log.Fatal("could not set up environment", err)
 	}
 
-	err = transact(setup, env, 2)
+	err = transact(setup, &env, 2)
 	if err != nil {
 		log.Printf("failure %s", err)
 		t.Fail()
@@ -538,7 +538,7 @@ func TestStressDualNoWaitOrderedPrefix(t *testing.T) {
 	}
 
 	env.EnsureOrderedPrefixes = true
-	err = transact(setup, env, 2)
+	err = transact(setup, &env, 2)
 	if err != nil {
 		log.Printf("failure %s", err)
 		t.Fail()
