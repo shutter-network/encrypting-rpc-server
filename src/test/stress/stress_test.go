@@ -26,6 +26,12 @@ import (
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 )
 
+func skipCI(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping testing in CI environment")
+	}
+}
+
 // the ethereum address of the key broadcast contract
 const KEY_BROADCAST_CONTRACT_ADDRESS = "0x1FD85EfeC5FC18f2f688f82489468222dfC36d6D"
 
@@ -513,6 +519,7 @@ func drain(ctx context.Context, pk *ecdsa.PrivateKey, address common.Address, ba
 
 // not really a test, but useful to collect from previously funded test accounts
 func TestEmptyAccounts(t *testing.T) {
+	skipCI(t)
 	setup, err := createSetup(false)
 	if err != nil {
 		log.Fatal("could not create setup", err)
@@ -548,6 +555,7 @@ func TestEmptyAccounts(t *testing.T) {
 }
 
 func TestStressSingle(t *testing.T) {
+	skipCI(t)
 	setup, err := createSetup(true)
 	if err != nil {
 		log.Fatal("could not create setup", err)
@@ -565,6 +573,7 @@ func TestStressSingle(t *testing.T) {
 }
 
 func TestStressDualWait(t *testing.T) {
+	skipCI(t)
 	setup, err := createSetup(true)
 	if err != nil {
 		log.Fatal("could not create setup", err)
@@ -585,6 +594,7 @@ func TestStressDualWait(t *testing.T) {
 
 // run with `go test -test.v -timeout 3m -run TestStressDualNoWait`; currently flaky
 func TestStressDualNoWait(t *testing.T) {
+	skipCI(t)
 	setup, err := createSetup(true)
 	if err != nil {
 		log.Fatal("could not create setup", err)
@@ -604,6 +614,7 @@ func TestStressDualNoWait(t *testing.T) {
 
 // send many transactions as quickly as possible, but ensure the identityPrefixes are ordered (low to high)
 func TestStressManyNoWaitOrderedPrefix(t *testing.T) {
+	skipCI(t)
 	setup, err := createSetup(true)
 	if err != nil {
 		log.Fatal("could not create setup", err)
