@@ -578,7 +578,6 @@ func TestStressSingle(t *testing.T) {
 		log.Printf("failure %s", err)
 		t.Fail()
 	}
-	fmt.Println("transacted")
 }
 
 func TestStressDualWait(t *testing.T) {
@@ -598,7 +597,6 @@ func TestStressDualWait(t *testing.T) {
 		log.Printf("failure %s", err)
 		t.Fail()
 	}
-	fmt.Println("transacted")
 }
 
 // run with `go test -test.v -timeout 3m -run TestStressDualNoWait`; currently flaky
@@ -618,7 +616,6 @@ func TestStressDualNoWait(t *testing.T) {
 		log.Printf("failure %s", err)
 		t.Fail()
 	}
-	fmt.Println("transacted")
 }
 
 // send two transactions in the same block by the same sender with the same identityPrefix
@@ -663,5 +660,4 @@ func TestStressManyNoWaitOrderedPrefix(t *testing.T) {
 		log.Printf("failure %s", err)
 		t.Fail()
 	}
-	fmt.Println("transacted")
 }
