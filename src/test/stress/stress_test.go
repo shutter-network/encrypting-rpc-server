@@ -126,10 +126,22 @@ func createSetup(fundNewAccount bool) (StressSetup, error) {
 	defer f.Close()
 
 	encoder := hex.NewEncoder(f)
-	encoder.Write(transactPrivateKeyBytes)
-	f.Write([]byte(" "))
-	encoder.Write(transactFromAddress.Bytes())
-	f.Write([]byte("\n"))
+	_, err = encoder.Write(transactPrivateKeyBytes)
+	if err != nil {
+		return *setup, err
+	}
+	_, err = f.Write([]byte(" "))
+	if err != nil {
+		return *setup, err
+	}
+	_, err = encoder.Write(transactFromAddress.Bytes())
+	if err != nil {
+		return *setup, err
+	}
+	_, err = f.Write([]byte("\n"))
+	if err != nil {
+		return *setup, err
+	}
 
 	setup.TransactSign = func(address common.Address, tx *types.Transaction) (*types.Transaction, error) {
 		if address != transactFromAddress {
@@ -182,9 +194,18 @@ func fund(setup StressSetup) error {
 	}
 	var data []byte
 	nonce, err := setup.Client.PendingNonceAt(context.Background(), setup.SubmitFromAddress)
+	if err != nil {
+		return err
+	}
 	tx := types.NewTransaction(nonce, setup.TransactFromAddress, value, gasLimit, gasPrice, data)
 	signedTx, err := setup.SubmitSign(setup.SubmitFromAddress, tx)
-	setup.Client.SendTransaction(context.Background(), signedTx)
+	if err != nil {
+		return err
+	}
+	err = setup.Client.SendTransaction(context.Background(), signedTx)
+	if err != nil {
+		return err
+	}
 	log.Println("sent funding tx", signedTx.Hash().Hex(), "to", setup.TransactFromAddress)
 	_, err = bind.WaitMined(context.Background(), setup.Client, signedTx)
 	return err
@@ -305,12 +326,15 @@ func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, 
 
 	log.Println("nonce before encryption", tx.Nonce())
 	var buff bytes.Buffer
-	tx.EncodeRLP(&buff)
+	err = tx.EncodeRLP(&buff)
 
 	if err != nil {
-		return nil, identityPrefix, fmt.Errorf("failed to marshal tx %v", err)
+		return nil, identityPrefix, fmt.Errorf("failed encode RLP %v", err)
 	}
 	j, err := tx.MarshalJSON()
+	if err != nil {
+		return nil, identityPrefix, fmt.Errorf("failed to marshal json %v", err)
+	}
 	log.Println("tx to be encrypted", string(j[:]))
 	encryptedTx := shcrypto.Encrypt(buff.Bytes(), (*shcrypto.EonPublicKey)(env.EonPublicKey), identity, sigma)
 	return encryptedTx, identityPrefix, nil
@@ -351,7 +375,9 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 		return err
 	}
 	suggestedGasPrice, err := setup.Client.SuggestGasPrice(context.Background())
-
+	if err != nil {
+		return err
+	}
 	feeCapAndTipCap := big.NewInt(0).Add(suggestedGasPrice, suggestedGasTipCap)
 
 	gasFloat, _ := suggestedGasPrice.Float64()
@@ -479,6 +505,9 @@ func drain(ctx context.Context, pk *ecdsa.PrivateKey, address common.Address, ba
 		log.Println("failed to send", err)
 	}
 	receipt, err := bind.WaitMined(ctx, setup.Client, signed)
+	if err != nil {
+		log.Println("failed to wait for tx", err)
+	}
 	log.Println("status", receipt.Status)
 }
 
@@ -489,6 +518,9 @@ func TestEmptyAccounts(t *testing.T) {
 		log.Fatal("could not create setup", err)
 	}
 	fd, err := os.Open("pk.hex")
+	if err != nil {
+		log.Fatal("Could not open pk.hex")
+	}
 	defer fd.Close()
 	pks, err := ReadPks(fd)
 	if err != nil {
@@ -496,7 +528,7 @@ func TestEmptyAccounts(t *testing.T) {
 	}
 	block, err := setup.Client.BlockNumber(context.Background())
 	if err != nil {
-		log.Fatal("could not query block number")
+		log.Fatal("could not query block number", err)
 	}
 	for i := range pks {
 		public := pks[i].Public()
