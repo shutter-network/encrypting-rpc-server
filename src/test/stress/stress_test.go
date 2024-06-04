@@ -1,6 +1,7 @@
 package stress
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/ecdsa"
@@ -8,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
 	"os"
@@ -51,7 +53,7 @@ type StressSetup struct {
 	KeyBroadcastContract shopContractBindings.KeyBroadcastContract
 }
 
-func createSetup() (StressSetup, error) {
+func createSetup(fundNewAccount bool) (StressSetup, error) {
 	setup := new(StressSetup)
 	client, err := ethclient.Dial("https://rpc.chiado.gnosis.gateway.fm")
 	if err != nil {
@@ -139,13 +141,13 @@ func createSetup() (StressSetup, error) {
 	}
 	setup.TransactPrivateKey = transactPrivateKey
 	setup.TransactFromAddress = transactFromAddress
-
-	err = fund(*setup)
-	if err != nil {
-		return *setup, err
+	if fundNewAccount {
+		err = fund(*setup)
+		if err != nil {
+			return *setup, err
+		}
+		log.Println("Funding complete")
 	}
-	log.Println("Funding complete")
-
 	keyperSetManagerContract, err := shopContractBindings.NewKeyperSetManager(common.HexToAddress(KEYPER_SET_MANAGER_CONTRACT_ADDRESS), client)
 	if err != nil {
 		return *setup, fmt.Errorf("can not get KeyperSetManager %v", err)
@@ -195,10 +197,14 @@ type StressEnvironment struct {
 	Eon                   uint64
 	EonPublicKey          *shcrypto.EonPublicKey
 	WaitOnEverySubmit     bool
+	EnsureOrderedPrefixes bool
+	PreviousPrefix        shcrypto.Block
 }
 
 func createStressEnvironment(ctx context.Context, setup StressSetup) (StressEnvironment, error) {
 	eon, eonKey, err := getEonKey(ctx, setup)
+
+	emptyPrefix := shcrypto.Block{}
 
 	environment := StressEnvironment{
 		TransacterOpts: bind.TransactOpts{
@@ -209,8 +215,11 @@ func createStressEnvironment(ctx context.Context, setup StressSetup) (StressEnvi
 			From:   setup.SubmitFromAddress,
 			Signer: setup.SubmitSign,
 		},
-		Eon:          eon,
-		EonPublicKey: eonKey,
+		Eon:                   eon,
+		EonPublicKey:          eonKey,
+		WaitOnEverySubmit:     false,
+		EnsureOrderedPrefixes: false,
+		PreviousPrefix:        emptyPrefix,
 	}
 	if err != nil {
 		return environment, fmt.Errorf("could not get eonKey %v", err)
@@ -257,6 +266,15 @@ func getEonKey(ctx context.Context, setup StressSetup) (uint64, *shcrypto.EonPub
 
 }
 
+func createIdentity() (shcrypto.Block, error) {
+	identityPrefix, err := shcrypto.RandomSigma(cryptorand.Reader)
+	if err != nil {
+		return shcrypto.Block{}, fmt.Errorf("could not get random identityPrefix %v", err)
+	}
+
+	return identityPrefix, nil
+}
+
 func encrypt(ctx context.Context, tx types.Transaction, env StressEnvironment, setup StressSetup) (*shcrypto.EncryptedMessage, shcrypto.Block, error) {
 
 	sigma, err := shcrypto.RandomSigma(cryptorand.Reader)
@@ -264,14 +282,24 @@ func encrypt(ctx context.Context, tx types.Transaction, env StressEnvironment, s
 		return nil, shcrypto.Block{}, fmt.Errorf("could not get sigma bytes %s", err)
 	}
 
-	identityPrefix, err := shcrypto.RandomSigma(cryptorand.Reader)
-	if err != nil {
-		return nil, shcrypto.Block{}, fmt.Errorf("could not get random identityPrefix %v", err)
-	}
-	identity := rpc.ComputeIdentity(identityPrefix[:], setup.SubmitFromAddress)
-	identityMarshal := identity.Marshal()
+	identityPrefix, err := createIdentity()
 
-	log.Println("creating Identity ", hex.EncodeToString(identityMarshal))
+	if err != nil {
+		return nil, identityPrefix, err
+	}
+
+	if env.EnsureOrderedPrefixes {
+		for hex.EncodeToString(identityPrefix[:]) < hex.EncodeToString(env.PreviousPrefix[:]) {
+			identityPrefix, err = createIdentity()
+			if err != nil {
+				return nil, identityPrefix, err
+			}
+		}
+	}
+	env.PreviousPrefix = identityPrefix
+	identity := rpc.ComputeIdentity(identityPrefix[:], setup.SubmitFromAddress)
+
+	log.Println("created Identity ", hex.EncodeToString(identity.Marshal()))
 	log.Println("nonce before encryption", tx.Nonce())
 	var buff bytes.Buffer
 	tx.EncodeRLP(&buff)
@@ -398,8 +426,54 @@ func transact(setup StressSetup, env StressEnvironment, count int) error {
 	return nil
 }
 
+func ReadPks(r io.Reader) ([]*ecdsa.PrivateKey, error) {
+	scanner := bufio.NewScanner(r)
+	scanner.Split(bufio.ScanWords)
+	var result []*ecdsa.PrivateKey
+	for scanner.Scan() {
+		x := scanner.Text()
+		if len(x) == 64 {
+			pk, err := crypto.HexToECDSA(x)
+			if err != nil {
+				return result, err
+			}
+			result = append(result, pk)
+		}
+	}
+	return result, scanner.Err()
+}
+
+func TestReadAccounts(t *testing.T) {
+	setup, err := createSetup(false)
+	if err != nil {
+		log.Fatal("could not create setup", err)
+	}
+	fd, err := os.Open("pk.hex")
+	defer fd.Close()
+	pks, err := ReadPks(fd)
+	if err != nil {
+		log.Fatal("error when reading private keys", err)
+	}
+	block, err := setup.Client.BlockNumber(context.Background())
+	if err != nil {
+		log.Fatal("could not query block number")
+	}
+	for i := range pks {
+		public := pks[i].Public()
+		publicKey, ok := public.(*ecdsa.PublicKey)
+		if !ok {
+			log.Fatal("error casting public key to ECDSA")
+		}
+		address := crypto.PubkeyToAddress(*publicKey)
+		balance, err := setup.Client.BalanceAt(context.Background(), address, big.NewInt(int64(block)))
+		if err == nil {
+			log.Println(address.Hex(), balance)
+		}
+	}
+}
+
 func TestStressSingle(t *testing.T) {
-	setup, err := createSetup()
+	setup, err := createSetup(true)
 	if err != nil {
 		log.Fatal("could not create setup", err)
 	}
@@ -407,7 +481,6 @@ func TestStressSingle(t *testing.T) {
 	if err != nil {
 		log.Fatal("could not set up environment", err)
 	}
-	env.WaitOnEverySubmit = false
 	err = transact(setup, env, 1)
 	if err != nil {
 		log.Printf("failure %s", err)
@@ -417,7 +490,7 @@ func TestStressSingle(t *testing.T) {
 }
 
 func TestStressDualWait(t *testing.T) {
-	setup, err := createSetup()
+	setup, err := createSetup(true)
 	if err != nil {
 		log.Fatal("could not create setup", err)
 	}
@@ -425,8 +498,8 @@ func TestStressDualWait(t *testing.T) {
 	if err != nil {
 		log.Fatal("could not set up environment", err)
 	}
-
 	env.WaitOnEverySubmit = true
+
 	err = transact(setup, env, 2)
 	if err != nil {
 		log.Printf("failure %s", err)
@@ -437,7 +510,7 @@ func TestStressDualWait(t *testing.T) {
 
 // run with `go test -test.v -timeout 3m -run TestStressDualNoWait`; currently fails
 func TestStressDualNoWait(t *testing.T) {
-	setup, err := createSetup()
+	setup, err := createSetup(true)
 	if err != nil {
 		log.Fatal("could not create setup", err)
 	}
@@ -446,7 +519,25 @@ func TestStressDualNoWait(t *testing.T) {
 		log.Fatal("could not set up environment", err)
 	}
 
-	env.WaitOnEverySubmit = false
+	err = transact(setup, env, 2)
+	if err != nil {
+		log.Printf("failure %s", err)
+		t.Fail()
+	}
+	fmt.Println("transacted")
+}
+
+func TestStressDualNoWaitOrderedPrefix(t *testing.T) {
+	setup, err := createSetup(true)
+	if err != nil {
+		log.Fatal("could not create setup", err)
+	}
+	env, err := createStressEnvironment(context.Background(), setup)
+	if err != nil {
+		log.Fatal("could not set up environment", err)
+	}
+
+	env.EnsureOrderedPrefixes = true
 	err = transact(setup, env, 2)
 	if err != nil {
 		log.Printf("failure %s", err)
