@@ -41,11 +41,10 @@ const KeyperSetChangeLookAhead = 2
 type StressSetup struct {
 	Client               *ethclient.Client
 	SignerForChain       types.Signer
-	SubmitSigner         types.EIP155Signer
+	ChainID              *big.Int
 	SubmitSign           bind.SignerFn
 	SubmitPrivateKey     *ecdsa.PrivateKey
 	SubmitFromAddress    common.Address
-	TransactSigner       types.EIP155Signer
 	TransactSign         bind.SignerFn
 	TransactPrivateKey   *ecdsa.PrivateKey
 	TransactFromAddress  common.Address
@@ -67,6 +66,7 @@ func createSetup(fundNewAccount bool) (StressSetup, error) {
 	if err != nil {
 		return *setup, fmt.Errorf("could not query chainId %v", err)
 	}
+	setup.ChainID = chainID
 
 	signerForChain := types.LatestSignerForChainID(chainID)
 	setup.SignerForChain = signerForChain
@@ -199,6 +199,7 @@ type StressEnvironment struct {
 	Eon                   uint64
 	EonPublicKey          *shcrypto.EonPublicKey
 	WaitOnEverySubmit     bool
+	// work around a bug, where decryption keys are tried in the order of identityPrefixes
 	EnsureOrderedPrefixes bool
 	PreviousPrefix        shcrypto.Block
 }
@@ -368,7 +369,7 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 		innerNonce := env.TransactStartingNonce.Uint64() + uint64(i)
 		tx := types.NewTx(
 			&types.DynamicFeeTx{
-				ChainID:   setup.SubmitSigner.ChainID(),
+				ChainID:   setup.ChainID,
 				Nonce:     innerNonce,
 				GasFeeCap: gasFeeCap,
 				GasTipCap: suggestedGasTipCap,
@@ -481,6 +482,7 @@ func drain(ctx context.Context, pk *ecdsa.PrivateKey, address common.Address, ba
 	log.Println("status", receipt.Status)
 }
 
+// not really a test, but useful to collect from previously funded test accounts
 func TestEmptyAccounts(t *testing.T) {
 	setup, err := createSetup(false)
 	if err != nil {
@@ -549,7 +551,7 @@ func TestStressDualWait(t *testing.T) {
 	fmt.Println("transacted")
 }
 
-// run with `go test -test.v -timeout 3m -run TestStressDualNoWait`; currently fails
+// run with `go test -test.v -timeout 3m -run TestStressDualNoWait`; currently flaky
 func TestStressDualNoWait(t *testing.T) {
 	setup, err := createSetup(true)
 	if err != nil {
@@ -568,6 +570,7 @@ func TestStressDualNoWait(t *testing.T) {
 	fmt.Println("transacted")
 }
 
+// send many transactions as quickly as possible, but ensure the identityPrefixes are ordered (low to high)
 func TestStressManyNoWaitOrderedPrefix(t *testing.T) {
 	setup, err := createSetup(true)
 	if err != nil {
