@@ -621,6 +621,30 @@ func TestStressDualNoWait(t *testing.T) {
 	fmt.Println("transacted")
 }
 
+// send two transactions in the same block by the same sender with the same identityPrefix
+func TestStressDualDuplicatePrefix(t *testing.T) {
+	skipCI(t)
+	setup, err := createSetup(true)
+	if err != nil {
+		log.Fatal("could not create setup", err)
+	}
+	env, err := createStressEnvironment(context.Background(), setup)
+	if err != nil {
+		log.Fatal("could not set up environment", err)
+	}
+	prefix, err := createIdentity()
+	var prefixes []shcrypto.Block
+	prefixes = append(prefixes, prefix)
+	prefixes = append(prefixes, prefix)
+	env.IdentityPrefixes = prefixes
+
+	err = transact(setup, &env, 2)
+	if err != nil {
+		log.Printf("failure %s", err)
+		t.Fail()
+	}
+}
+
 // send many transactions as quickly as possible, but ensure the identityPrefixes are ordered (low to high)
 func TestStressManyNoWaitOrderedPrefix(t *testing.T) {
 	skipCI(t)
