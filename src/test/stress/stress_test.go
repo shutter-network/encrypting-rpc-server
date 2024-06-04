@@ -40,6 +40,7 @@ const KeyperSetChangeLookAhead = 2
 // contains all the setup required to interact with the chain
 type StressSetup struct {
 	Client               *ethclient.Client
+	SignerForChain       types.Signer
 	SubmitSigner         types.EIP155Signer
 	SubmitSign           bind.SignerFn
 	SubmitPrivateKey     *ecdsa.PrivateKey
@@ -68,6 +69,7 @@ func createSetup(fundNewAccount bool) (StressSetup, error) {
 	}
 
 	signerForChain := types.LatestSignerForChainID(chainID)
+	setup.SignerForChain = signerForChain
 
 	submitKeyHex := os.Getenv("STRESS_TEST_PK")
 	if len(submitKeyHex) < 64 {
@@ -316,6 +318,7 @@ func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, 
 func submitEncryptedTx(ctx context.Context, setup StressSetup, env *StressEnvironment, tx types.Transaction) (*types.Transaction, error) {
 
 	opts := env.SubmitterOpts
+	log.Println("submit nonce", opts.Nonce)
 
 	opts.Value = big.NewInt(0).Sub(tx.Cost(), tx.Value())
 
@@ -382,8 +385,12 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 		}
 		innerTxs = append(innerTxs, *signedTx)
 		log.Println("used nonce", signedTx.Nonce())
-		// TODO: move submission to a second loop to increase throughput
-		submitTx, err := submitEncryptedTx(context.Background(), setup, env, *signedTx)
+	}
+	for i := range innerTxs {
+		signedTx := innerTxs[i]
+		submitNonce := big.NewInt(0).Add(env.SubmitStartingNonce, big.NewInt(int64(i)))
+		env.SubmitterOpts.Nonce = submitNonce
+		submitTx, err := submitEncryptedTx(context.Background(), setup, env, signedTx)
 		if err != nil {
 			return err
 		}
@@ -443,7 +450,38 @@ func ReadPks(r io.Reader) ([]*ecdsa.PrivateKey, error) {
 	return result, scanner.Err()
 }
 
-func TestReadAccounts(t *testing.T) {
+func drain(ctx context.Context, pk *ecdsa.PrivateKey, address common.Address, balance uint64, setup StressSetup) {
+	gasPrice, err := setup.Client.SuggestGasPrice(ctx)
+	if err != nil {
+		log.Println("could not query gasPrice")
+	}
+	gasLimit := uint64(21000)
+	remaining := balance - gasLimit*gasPrice.Uint64()
+	data := make([]byte, 0)
+
+	nonce, err := setup.Client.PendingNonceAt(ctx, address)
+	if err != nil {
+		log.Println("could not query nonce", err)
+	}
+	tx := types.NewTransaction(nonce, setup.SubmitFromAddress, big.NewInt(int64(remaining)), gasLimit, gasPrice, data)
+
+	signature, err := crypto.Sign(setup.SignerForChain.Hash(tx).Bytes(), pk)
+	if err != nil {
+		log.Println("could not create signature", err)
+	}
+	signed, err := tx.WithSignature(setup.SignerForChain, signature)
+	if err != nil {
+		log.Println("could not add signature", err)
+	}
+	err = setup.Client.SendTransaction(ctx, signed)
+	if err != nil {
+		log.Println("failed to send", err)
+	}
+	receipt, err := bind.WaitMined(ctx, setup.Client, signed)
+	log.Println("status", receipt.Status)
+}
+
+func TestEmptyAccounts(t *testing.T) {
 	setup, err := createSetup(false)
 	if err != nil {
 		log.Fatal("could not create setup", err)
@@ -468,6 +506,9 @@ func TestReadAccounts(t *testing.T) {
 		balance, err := setup.Client.BalanceAt(context.Background(), address, big.NewInt(int64(block)))
 		if err == nil {
 			log.Println(address.Hex(), balance)
+		}
+		if balance.Uint64() > 0 {
+			drain(context.Background(), pks[i], address, balance.Uint64(), setup)
 		}
 	}
 }
@@ -527,7 +568,7 @@ func TestStressDualNoWait(t *testing.T) {
 	fmt.Println("transacted")
 }
 
-func TestStressDualNoWaitOrderedPrefix(t *testing.T) {
+func TestStressManyNoWaitOrderedPrefix(t *testing.T) {
 	setup, err := createSetup(true)
 	if err != nil {
 		log.Fatal("could not create setup", err)
@@ -538,7 +579,7 @@ func TestStressDualNoWaitOrderedPrefix(t *testing.T) {
 	}
 
 	env.EnsureOrderedPrefixes = true
-	err = transact(setup, &env, 2)
+	err = transact(setup, &env, 10)
 	if err != nil {
 		log.Printf("failure %s", err)
 		t.Fail()
