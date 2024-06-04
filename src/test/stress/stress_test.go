@@ -13,6 +13,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"sort"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -228,13 +229,11 @@ type StressEnvironment struct {
 	WaitOnEverySubmit     bool
 	// work around a bug, where decryption keys are tried in the order of identityPrefixes
 	EnsureOrderedPrefixes bool
-	PreviousPrefix        shcrypto.Block
+	IdentityPrefixes      []shcrypto.Block
 }
 
 func createStressEnvironment(ctx context.Context, setup StressSetup) (StressEnvironment, error) {
 	eon, eonKey, err := getEonKey(ctx, setup)
-
-	emptyPrefix := shcrypto.Block{}
 
 	environment := StressEnvironment{
 		TransacterOpts: bind.TransactOpts{
@@ -249,7 +248,6 @@ func createStressEnvironment(ctx context.Context, setup StressSetup) (StressEnvi
 		EonPublicKey:          eonKey,
 		WaitOnEverySubmit:     false,
 		EnsureOrderedPrefixes: false,
-		PreviousPrefix:        emptyPrefix,
 	}
 	if err != nil {
 		return environment, fmt.Errorf("could not get eonKey %v", err)
@@ -301,36 +299,31 @@ func createIdentity() (shcrypto.Block, error) {
 	if err != nil {
 		return shcrypto.Block{}, fmt.Errorf("could not get random identityPrefix %v", err)
 	}
+	log.Println(hex.EncodeToString(identityPrefix[:]))
 
 	return identityPrefix, nil
 }
 
-func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, setup StressSetup) (*shcrypto.EncryptedMessage, shcrypto.Block, error) {
+func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, setup StressSetup, count int) (*shcrypto.EncryptedMessage, shcrypto.Block, error) {
 
 	sigma, err := shcrypto.RandomSigma(cryptorand.Reader)
 	if err != nil {
 		return nil, shcrypto.Block{}, fmt.Errorf("could not get sigma bytes %s", err)
 	}
 
-	log.Println("previous prefix", hex.EncodeToString(env.PreviousPrefix[:]))
-	identityPrefix, err := createIdentity()
+	var identityPrefix shcrypto.Block
+	if count < len(env.IdentityPrefixes) {
+		identityPrefix = env.IdentityPrefixes[count]
+	} else {
+		identityPrefix, err = createIdentity()
 
-	if err != nil {
-		return nil, identityPrefix, err
-	}
-
-	if env.EnsureOrderedPrefixes {
-		for hex.EncodeToString(identityPrefix[:]) < hex.EncodeToString(env.PreviousPrefix[:]) {
-			identityPrefix, err = createIdentity()
-			if err != nil {
-				return nil, identityPrefix, err
-			}
+		if err != nil {
+			return nil, identityPrefix, err
 		}
 	}
-	env.PreviousPrefix = identityPrefix
+
 	identity := rpc.ComputeIdentity(identityPrefix[:], setup.SubmitFromAddress)
 
-	log.Println("nonce before encryption", tx.Nonce())
 	var buff bytes.Buffer
 	err = tx.EncodeRLP(&buff)
 
@@ -346,14 +339,14 @@ func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, 
 	return encryptedTx, identityPrefix, nil
 }
 
-func submitEncryptedTx(ctx context.Context, setup StressSetup, env *StressEnvironment, tx types.Transaction) (*types.Transaction, error) {
+func submitEncryptedTx(ctx context.Context, setup StressSetup, env *StressEnvironment, tx types.Transaction, count int) (*types.Transaction, error) {
 
 	opts := env.SubmitterOpts
 	log.Println("submit nonce", opts.Nonce)
 
 	opts.Value = big.NewInt(0).Sub(tx.Cost(), tx.Value())
 
-	encryptedTx, identityPrefix, err := encrypt(ctx, tx, env, setup)
+	encryptedTx, identityPrefix, err := encrypt(ctx, tx, env, setup, count)
 	if err != nil {
 		return nil, fmt.Errorf("could not encrypt %v", err)
 	}
@@ -387,6 +380,22 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 	feeCapAndTipCap := big.NewInt(0).Add(suggestedGasPrice, suggestedGasTipCap)
 
 	gasFloat, _ := suggestedGasPrice.Float64()
+
+	if env.EnsureOrderedPrefixes {
+
+		var identityPrefixes []shcrypto.Block
+		for i := 0; i < count; i++ {
+			identity, err := createIdentity()
+			if err != nil {
+				return err
+			}
+			identityPrefixes = append(identityPrefixes, identity)
+		}
+		sort.Slice(identityPrefixes, func(i, j int) bool {
+			return hex.EncodeToString(identityPrefixes[i][:]) < hex.EncodeToString(identityPrefixes[j][:])
+		})
+		env.IdentityPrefixes = identityPrefixes
+	}
 
 	for i := 0; i < count; i++ {
 
@@ -423,7 +432,7 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 		signedTx := innerTxs[i]
 		submitNonce := big.NewInt(0).Add(env.SubmitStartingNonce, big.NewInt(int64(i)))
 		env.SubmitterOpts.Nonce = submitNonce
-		submitTx, err := submitEncryptedTx(context.Background(), setup, env, signedTx)
+		submitTx, err := submitEncryptedTx(context.Background(), setup, env, signedTx, i)
 		if err != nil {
 			return err
 		}
@@ -625,7 +634,7 @@ func TestStressManyNoWaitOrderedPrefix(t *testing.T) {
 	}
 
 	env.EnsureOrderedPrefixes = true
-	err = transact(setup, &env, 10)
+	err = transact(setup, &env, 20)
 	if err != nil {
 		log.Printf("failure %s", err)
 		t.Fail()
