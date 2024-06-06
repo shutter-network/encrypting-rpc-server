@@ -264,6 +264,8 @@ func defaultGasLimitFn(value *big.Int, data []byte, toAddress *common.Address, i
 	return uint64(21000)
 }
 
+type ConstraintFn func(inclusions []*types.Receipt) error
+
 // contains the context for the current stress test to create transactions
 type StressEnvironment struct {
 	TransacterOpts        bind.TransactOpts
@@ -271,6 +273,7 @@ type StressEnvironment struct {
 	TransactGasPriceFn    GasPriceFn
 	TransactGasLimitFn    GasLimitFn
 	InclusionWaitTimeout  time.Duration
+	InclusionConstraints  ConstraintFn
 	SubmitterOpts         bind.TransactOpts
 	SubmitStartingNonce   *big.Int
 	SubmissionWaitTimeout time.Duration
@@ -294,6 +297,7 @@ func createStressEnvironment(ctx context.Context, setup StressSetup) (StressEnvi
 		TransactGasPriceFn:   defaultGasPriceFn,
 		TransactGasLimitFn:   defaultGasLimitFn,
 		InclusionWaitTimeout: time.Duration(time.Minute * 2),
+		InclusionConstraints: func(inclusions []*types.Receipt) error { return nil },
 		SubmitterOpts: bind.TransactOpts{
 			From:   setup.SubmitFromAddress,
 			Signer: setup.SubmitSign,
@@ -392,19 +396,19 @@ func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, 
 	return encryptedTx, identityPrefix, nil
 }
 
-func waitForTx(tx types.Transaction, description string, timeout time.Duration, setup StressSetup) error {
+func waitForTx(tx types.Transaction, description string, timeout time.Duration, setup StressSetup) (*types.Receipt, error) {
 	log.Println("waiting for "+description+" ", tx.Hash().Hex())
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	receipt, err := bind.WaitMined(ctx, setup.Client, &tx)
 	if err != nil {
-		return fmt.Errorf("error on WaitMined %s", err)
+		return nil, fmt.Errorf("error on WaitMined %s", err)
 	}
 	log.Println("status", receipt.Status, "block", receipt.BlockNumber)
 	if receipt.Status != 1 {
-		return fmt.Errorf("included tx failed")
+		return nil, fmt.Errorf("included tx failed")
 	}
-	return nil
+	return receipt, nil
 }
 
 func submitEncryptedTx(ctx context.Context, setup StressSetup, env *StressEnvironment, tx types.Transaction, count int) (*types.Transaction, error) {
@@ -506,7 +510,7 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 		}
 		submissions = append(submissions, *submitTx)
 		if env.WaitOnEverySubmit {
-			err = waitForTx(*submitTx, "submission", env.SubmissionWaitTimeout, setup)
+			_, err = waitForTx(*submitTx, "submission", env.SubmissionWaitTimeout, setup)
 			if err != nil {
 				return err
 			}
@@ -514,18 +518,21 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 		log.Println("Submit tx hash", submitTx.Hash().Hex(), "Encrypted tx hash", signedTx.Hash().Hex())
 	}
 	for _, submitTx := range submissions {
-		err = waitForTx(submitTx, "submission", env.SubmissionWaitTimeout, setup)
+		_, err = waitForTx(submitTx, "submission", env.SubmissionWaitTimeout, setup)
 		if err != nil {
 			return err
 		}
 	}
+	var receipts []*types.Receipt
 	for _, innerTx := range innerTxs {
-		err = waitForTx(innerTx, "inclusion", env.InclusionWaitTimeout, setup)
+		receipt, err := waitForTx(innerTx, "inclusion", env.InclusionWaitTimeout, setup)
 		if err != nil {
 			return err
 		}
+		receipts = append(receipts, receipt)
 	}
-	return nil
+	err = env.InclusionConstraints(receipts)
+	return err
 }
 
 func ReadPks(r io.Reader) ([]*ecdsa.PrivateKey, error) {
@@ -709,6 +716,41 @@ func TestStressManyNoWaitOrderedPrefix(t *testing.T) {
 
 	env.EnsureOrderedPrefixes = true
 	err = transact(setup, &env, 20)
+	if err != nil {
+		log.Printf("failure %s", err)
+		t.Fail()
+	}
+}
+
+func TestStressExceedEncryptedGasLimit(t *testing.T) {
+	skipCI(t)
+	setup, err := createSetup(true)
+	if err != nil {
+		log.Fatal("could not create setup", err)
+	}
+	env, err := createStressEnvironment(context.Background(), setup)
+	if err != nil {
+		log.Fatal("could not set up environment", err)
+	}
+
+	env.EnsureOrderedPrefixes = true
+	env.TransactGasLimitFn = func(value *big.Int, data []byte, toAddress *common.Address, i, count int) uint64 {
+		// last consumes over the limit
+		if count-i == 1 {
+			return uint64(1_000_000 - (i * 21_000) + 1)
+		}
+		return uint64(21000)
+	}
+	env.InclusionConstraints = func(receipts []*types.Receipt) error {
+		sort.Slice(receipts, func(a, b int) bool {
+			return receipts[a].BlockNumber.Uint64() < receipts[b].BlockNumber.Uint64()
+		})
+		if receipts[0].BlockNumber.Uint64() == receipts[len(receipts)-1].BlockNumber.Uint64() {
+			return fmt.Errorf("tx must not be all in the same block")
+		}
+		return nil
+	}
+	err = transact(setup, &env, 2)
 	if err != nil {
 		log.Printf("failure %s", err)
 		t.Fail()
