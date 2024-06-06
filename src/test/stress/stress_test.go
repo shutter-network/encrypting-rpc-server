@@ -258,13 +258,22 @@ func decreasingGasPriceFn(suggestedGasTipCap *big.Int, suggestedGasPrice *big.In
 	return gasFeeCap, suggestedGasTipCap
 }
 
+type GasLimitFn func(value *big.Int, data []byte, toAddress *common.Address, i int, count int) uint64
+
+func defaultGasLimitFn(value *big.Int, data []byte, toAddress *common.Address, i int, count int) uint64 {
+	return uint64(21000)
+}
+
 // contains the context for the current stress test to create transactions
 type StressEnvironment struct {
 	TransacterOpts        bind.TransactOpts
 	TransactStartingNonce *big.Int
 	TransactGasPriceFn    GasPriceFn
+	TransactGasLimitFn    GasLimitFn
+	InclusionWaitTimeout  time.Duration
 	SubmitterOpts         bind.TransactOpts
 	SubmitStartingNonce   *big.Int
+	SubmissionWaitTimeout time.Duration
 	Eon                   uint64
 	EonPublicKey          *shcrypto.EonPublicKey
 	WaitOnEverySubmit     bool
@@ -282,11 +291,14 @@ func createStressEnvironment(ctx context.Context, setup StressSetup) (StressEnvi
 			From:   setup.TransactFromAddress,
 			Signer: setup.TransactSign,
 		},
-		TransactGasPriceFn: defaultGasPriceFn,
+		TransactGasPriceFn:   defaultGasPriceFn,
+		TransactGasLimitFn:   defaultGasLimitFn,
+		InclusionWaitTimeout: time.Duration(time.Minute * 2),
 		SubmitterOpts: bind.TransactOpts{
 			From:   setup.SubmitFromAddress,
 			Signer: setup.SubmitSign,
 		},
+		SubmissionWaitTimeout: time.Duration(time.Second * 30),
 		Eon:                   eon,
 		EonPublicKey:          eonKey,
 		WaitOnEverySubmit:     false,
@@ -403,8 +415,7 @@ func submitEncryptedTx(ctx context.Context, setup StressSetup, env *StressEnviro
 
 func transact(setup StressSetup, env *StressEnvironment, count int) error {
 
-	value := big.NewInt(1)    // in wei
-	gasLimit := uint64(21000) // in units
+	value := big.NewInt(1) // in wei
 
 	toAddress := setup.SubmitFromAddress
 	var data []byte
@@ -448,6 +459,7 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 
 	for i := 0; i < count; i++ {
 		gasFeeCap, suggestedGasTipCap := env.TransactGasPriceFn(suggestedGasTipCap, suggestedGasPrice, i, count)
+		gasLimit := env.TransactGasLimitFn(value, data, &toAddress, i, count)
 		innerNonce := env.TransactStartingNonce.Uint64() + uint64(i)
 		tx := types.NewTx(
 			&types.DynamicFeeTx{
@@ -479,7 +491,7 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 		}
 		submissions = append(submissions, *submitTx)
 		if env.WaitOnEverySubmit {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Minute*2))
+			ctx, cancel := context.WithTimeout(context.Background(), env.SubmissionWaitTimeout)
 			defer cancel()
 			receipt, err := bind.WaitMined(ctx, setup.Client, submitTx)
 
@@ -494,7 +506,7 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 	for _, submitTx := range submissions {
 		log.Print("waiting for submission ", submitTx.Hash().Hex())
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Minute*2))
+		ctx, cancel := context.WithTimeout(context.Background(), env.SubmissionWaitTimeout)
 		defer cancel()
 		receipt, err := bind.WaitMined(ctx, setup.Client, &submitTx)
 		if err != nil {
@@ -507,7 +519,7 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 	}
 	for _, innerTx := range innerTxs {
 		log.Println("waiting for inclusion ", innerTx.Hash().Hex())
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Minute*2))
+		ctx, cancel := context.WithTimeout(context.Background(), env.InclusionWaitTimeout)
 		defer cancel()
 		receipt, err := bind.WaitMined(ctx, setup.Client, &innerTx)
 		if err != nil {
