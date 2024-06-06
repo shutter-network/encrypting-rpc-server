@@ -220,10 +220,27 @@ func fund(setup StressSetup) error {
 	return err
 }
 
+type GasFeeCap *big.Int
+type GasTipCap *big.Int
+
+type GasPriceFn func(suggestedGasTipCap *big.Int, suggestedGasPrice *big.Int, i int) (GasFeeCap, GasTipCap)
+
+func defaultGasPriceFn(suggestedGasTipCap *big.Int, suggestedGasPrice *big.Int, i int) (GasFeeCap, GasTipCap) {
+	feeCapAndTipCap := big.NewInt(0).Add(suggestedGasPrice, suggestedGasTipCap)
+
+	gasFloat, _ := suggestedGasPrice.Float64()
+	x := int64(gasFloat * 1.5) // fixed delta
+	log.Println("delta is ", x)
+	delta := big.NewInt(x)
+	gasFeeCap := big.NewInt(0).Add(feeCapAndTipCap, delta)
+	return gasFeeCap, suggestedGasTipCap
+}
+
 // contains the context for the current stress test to create transactions
 type StressEnvironment struct {
 	TransacterOpts        bind.TransactOpts
 	TransactStartingNonce *big.Int
+	TransactGasPriceFn    GasPriceFn
 	SubmitterOpts         bind.TransactOpts
 	SubmitStartingNonce   *big.Int
 	Eon                   uint64
@@ -243,6 +260,7 @@ func createStressEnvironment(ctx context.Context, setup StressSetup) (StressEnvi
 			From:   setup.TransactFromAddress,
 			Signer: setup.TransactSign,
 		},
+		TransactGasPriceFn: defaultGasPriceFn,
 		SubmitterOpts: bind.TransactOpts{
 			From:   setup.SubmitFromAddress,
 			Signer: setup.SubmitSign,
@@ -370,6 +388,7 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 	var data []byte
 	var submissions []types.Transaction
 	var innerTxs []types.Transaction
+
 	suggestedGasTipCap, err := setup.Client.SuggestGasTipCap(context.Background())
 	if err != nil {
 		return err
@@ -378,9 +397,6 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 	if err != nil {
 		return err
 	}
-	feeCapAndTipCap := big.NewInt(0).Add(suggestedGasPrice, suggestedGasTipCap)
-
-	gasFloat, _ := suggestedGasPrice.Float64()
 
 	identityPrefixes := env.IdentityPrefixes
 	for i := len(identityPrefixes); i < count; i++ {
@@ -414,10 +430,7 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 
 		//x := int64(gasFloat * (2. / float64(count)) * float64(i+1)) // higher delta for higher nonces
 		//x := int64(gasFloat * (2. / float64(count)) * float64(count-i+1)) // lower delta for higher nonces to affect ordering
-		x := int64(gasFloat * 1.5) // fixed delta
-		log.Println("delta is ", x)
-		delta := big.NewInt(x)
-		gasFeeCap := big.NewInt(0).Add(feeCapAndTipCap, delta)
+		gasFeeCap, suggestedGasTipCap := env.TransactGasPriceFn(suggestedGasTipCap, suggestedGasPrice, i)
 		innerNonce := env.TransactStartingNonce.Uint64() + uint64(i)
 		tx := types.NewTx(
 			&types.DynamicFeeTx{
