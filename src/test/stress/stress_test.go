@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"math/big"
+	"math/rand"
 	"os"
 	"sort"
 	"testing"
@@ -230,6 +231,7 @@ type StressEnvironment struct {
 	WaitOnEverySubmit     bool
 	// work around a bug, where decryption keys are tried in the order of identityPrefixes
 	EnsureOrderedPrefixes bool
+	ShufflePrefixes       bool
 	IdentityPrefixes      []shcrypto.Block
 }
 
@@ -300,8 +302,6 @@ func createIdentity() (shcrypto.Block, error) {
 	if err != nil {
 		return shcrypto.Block{}, fmt.Errorf("could not get random identityPrefix %v", err)
 	}
-	log.Println(hex.EncodeToString(identityPrefix[:]))
-
 	return identityPrefix, nil
 }
 
@@ -382,18 +382,29 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 
 	gasFloat, _ := suggestedGasPrice.Float64()
 
-	var identityPrefixes []shcrypto.Block
-	for i := 0; i < count; i++ {
+	identityPrefixes := env.IdentityPrefixes
+	for i := len(identityPrefixes); i < count; i++ {
 		identity, err := createIdentity()
 		if err != nil {
 			return err
 		}
 		identityPrefixes = append(identityPrefixes, identity)
 	}
+	if env.EnsureOrderedPrefixes && env.ShufflePrefixes {
+		log.Fatal("test setup incorrect: EnsureOrderedPrefixes and ShufflePrefixes can't both be set.")
+	}
 	if env.EnsureOrderedPrefixes {
 		sort.Slice(identityPrefixes, func(i, j int) bool {
 			return hex.EncodeToString(identityPrefixes[i][:]) < hex.EncodeToString(identityPrefixes[j][:])
 		})
+	}
+	if env.ShufflePrefixes {
+		dest := make([]shcrypto.Block, len(identityPrefixes))
+		perm := rand.Perm(len(identityPrefixes))
+		for i, v := range perm {
+			dest[v] = identityPrefixes[i]
+		}
+		identityPrefixes = dest
 	}
 	env.IdentityPrefixes = identityPrefixes
 
