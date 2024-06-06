@@ -392,6 +392,21 @@ func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, 
 	return encryptedTx, identityPrefix, nil
 }
 
+func waitForTx(tx types.Transaction, description string, timeout time.Duration, setup StressSetup) error {
+	log.Println("waiting for "+description+" ", tx.Hash().Hex())
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	receipt, err := bind.WaitMined(ctx, setup.Client, &tx)
+	if err != nil {
+		return fmt.Errorf("error on WaitMined %s", err)
+	}
+	log.Println("status", receipt.Status, "block", receipt.BlockNumber)
+	if receipt.Status != 1 {
+		return fmt.Errorf("included tx failed")
+	}
+	return nil
+}
+
 func submitEncryptedTx(ctx context.Context, setup StressSetup, env *StressEnvironment, tx types.Transaction, count int) (*types.Transaction, error) {
 
 	opts := env.SubmitterOpts
@@ -491,43 +506,23 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 		}
 		submissions = append(submissions, *submitTx)
 		if env.WaitOnEverySubmit {
-			ctx, cancel := context.WithTimeout(context.Background(), env.SubmissionWaitTimeout)
-			defer cancel()
-			receipt, err := bind.WaitMined(ctx, setup.Client, submitTx)
-
+			err = waitForTx(*submitTx, "submission", env.SubmissionWaitTimeout, setup)
 			if err != nil {
-				return fmt.Errorf("submit not mined %s", submitTx.Hash().Hex())
-			} else {
-				log.Println("status", receipt.Status)
+				return err
 			}
 		}
 		log.Println("Submit tx hash", submitTx.Hash().Hex(), "Encrypted tx hash", signedTx.Hash().Hex())
 	}
 	for _, submitTx := range submissions {
-		log.Print("waiting for submission ", submitTx.Hash().Hex())
-
-		ctx, cancel := context.WithTimeout(context.Background(), env.SubmissionWaitTimeout)
-		defer cancel()
-		receipt, err := bind.WaitMined(ctx, setup.Client, &submitTx)
+		err = waitForTx(submitTx, "submission", env.SubmissionWaitTimeout, setup)
 		if err != nil {
-			return fmt.Errorf("error on WaitMined %s", err)
-		}
-		log.Println("status", receipt.Status)
-		if receipt.Status != 1 {
-			return fmt.Errorf("submission failed")
+			return err
 		}
 	}
 	for _, innerTx := range innerTxs {
-		log.Println("waiting for inclusion ", innerTx.Hash().Hex())
-		ctx, cancel := context.WithTimeout(context.Background(), env.InclusionWaitTimeout)
-		defer cancel()
-		receipt, err := bind.WaitMined(ctx, setup.Client, &innerTx)
+		err = waitForTx(innerTx, "inclusion", env.InclusionWaitTimeout, setup)
 		if err != nil {
-			return fmt.Errorf("error on WaitMined %s", err)
-		}
-		log.Println("status", receipt.Status)
-		if receipt.Status != 1 {
-			return fmt.Errorf("included tx failed")
+			return err
 		}
 	}
 	return nil
