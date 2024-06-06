@@ -223,13 +223,35 @@ func fund(setup StressSetup) error {
 type GasFeeCap *big.Int
 type GasTipCap *big.Int
 
-type GasPriceFn func(suggestedGasTipCap *big.Int, suggestedGasPrice *big.Int, i int) (GasFeeCap, GasTipCap)
+type GasPriceFn func(suggestedGasTipCap *big.Int, suggestedGasPrice *big.Int, i int, count int) (GasFeeCap, GasTipCap)
 
-func defaultGasPriceFn(suggestedGasTipCap *big.Int, suggestedGasPrice *big.Int, i int) (GasFeeCap, GasTipCap) {
+func defaultGasPriceFn(suggestedGasTipCap *big.Int, suggestedGasPrice *big.Int, i int, count int) (GasFeeCap, GasTipCap) {
 	feeCapAndTipCap := big.NewInt(0).Add(suggestedGasPrice, suggestedGasTipCap)
 
 	gasFloat, _ := suggestedGasPrice.Float64()
 	x := int64(gasFloat * 1.5) // fixed delta
+	log.Println("delta is ", x)
+	delta := big.NewInt(x)
+	gasFeeCap := big.NewInt(0).Add(feeCapAndTipCap, delta)
+	return gasFeeCap, suggestedGasTipCap
+}
+
+func increasingGasPriceFn(suggestedGasTipCap *big.Int, suggestedGasPrice *big.Int, i int, count int) (GasFeeCap, GasTipCap) {
+	feeCapAndTipCap := big.NewInt(0).Add(suggestedGasPrice, suggestedGasTipCap)
+
+	gasFloat, _ := suggestedGasPrice.Float64()
+	x := int64(gasFloat * (2. / float64(count)) * float64(i+1)) // higher delta for higher nonces
+	log.Println("delta is ", x)
+	delta := big.NewInt(x)
+	gasFeeCap := big.NewInt(0).Add(feeCapAndTipCap, delta)
+	return gasFeeCap, suggestedGasTipCap
+}
+
+func decreasingGasPriceFn(suggestedGasTipCap *big.Int, suggestedGasPrice *big.Int, i int, count int) (GasFeeCap, GasTipCap) {
+	feeCapAndTipCap := big.NewInt(0).Add(suggestedGasPrice, suggestedGasTipCap)
+
+	gasFloat, _ := suggestedGasPrice.Float64()
+	x := int64(gasFloat * (2. / float64(count)) * float64(count-i)) // lower delta for higher nonces to test cut off
 	log.Println("delta is ", x)
 	delta := big.NewInt(x)
 	gasFeeCap := big.NewInt(0).Add(feeCapAndTipCap, delta)
@@ -425,12 +447,7 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 	env.IdentityPrefixes = identityPrefixes
 
 	for i := 0; i < count; i++ {
-
-		// TODO: make gas price calculation a function StressEnvironment.GasPriceFn()
-
-		//x := int64(gasFloat * (2. / float64(count)) * float64(i+1)) // higher delta for higher nonces
-		//x := int64(gasFloat * (2. / float64(count)) * float64(count-i+1)) // lower delta for higher nonces to affect ordering
-		gasFeeCap, suggestedGasTipCap := env.TransactGasPriceFn(suggestedGasTipCap, suggestedGasPrice, i)
+		gasFeeCap, suggestedGasTipCap := env.TransactGasPriceFn(suggestedGasTipCap, suggestedGasPrice, i, count)
 		innerNonce := env.TransactStartingNonce.Uint64() + uint64(i)
 		tx := types.NewTx(
 			&types.DynamicFeeTx{
