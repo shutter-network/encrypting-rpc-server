@@ -15,6 +15,7 @@ import (
 	"os"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -438,7 +439,9 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 		}
 		submissions = append(submissions, *submitTx)
 		if env.WaitOnEverySubmit {
-			receipt, err := bind.WaitMined(context.Background(), setup.Client, submitTx)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Minute*2))
+			defer cancel()
+			receipt, err := bind.WaitMined(ctx, setup.Client, submitTx)
 
 			if err != nil {
 				return fmt.Errorf("submit not mined %s", submitTx.Hash().Hex())
@@ -451,7 +454,9 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 	for _, submitTx := range submissions {
 		log.Print("waiting for submission ", submitTx.Hash().Hex())
 
-		receipt, err := bind.WaitMined(context.Background(), setup.Client, &submitTx)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Minute*2))
+		defer cancel()
+		receipt, err := bind.WaitMined(ctx, setup.Client, &submitTx)
 		if err != nil {
 			return fmt.Errorf("error on WaitMined %s", err)
 		}
@@ -462,8 +467,9 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 	}
 	for _, innerTx := range innerTxs {
 		log.Println("waiting for inclusion ", innerTx.Hash().Hex())
-
-		receipt, err := bind.WaitMined(context.Background(), setup.Client, &innerTx)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Minute*2))
+		defer cancel()
+		receipt, err := bind.WaitMined(ctx, setup.Client, &innerTx)
 		if err != nil {
 			return fmt.Errorf("error on WaitMined %s", err)
 		}
