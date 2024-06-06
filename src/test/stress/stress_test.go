@@ -382,21 +382,20 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 
 	gasFloat, _ := suggestedGasPrice.Float64()
 
-	if env.EnsureOrderedPrefixes {
-
-		var identityPrefixes []shcrypto.Block
-		for i := 0; i < count; i++ {
-			identity, err := createIdentity()
-			if err != nil {
-				return err
-			}
-			identityPrefixes = append(identityPrefixes, identity)
+	var identityPrefixes []shcrypto.Block
+	for i := 0; i < count; i++ {
+		identity, err := createIdentity()
+		if err != nil {
+			return err
 		}
+		identityPrefixes = append(identityPrefixes, identity)
+	}
+	if env.EnsureOrderedPrefixes {
 		sort.Slice(identityPrefixes, func(i, j int) bool {
 			return hex.EncodeToString(identityPrefixes[i][:]) < hex.EncodeToString(identityPrefixes[j][:])
 		})
-		env.IdentityPrefixes = identityPrefixes
 	}
+	env.IdentityPrefixes = identityPrefixes
 
 	for i := 0; i < count; i++ {
 
