@@ -659,7 +659,7 @@ func TestStressDualWait(t *testing.T) {
 	}
 }
 
-// run with `go test -test.v -timeout 3m -run TestStressDualNoWait`; currently flaky
+// run with `go test -test.v -run TestStressDualNoWait`; currently flaky
 func TestStressDualNoWait(t *testing.T) {
 	skipCI(t)
 	setup, err := createSetup(true)
@@ -670,6 +670,28 @@ func TestStressDualNoWait(t *testing.T) {
 	if err != nil {
 		log.Fatal("could not set up environment", err)
 	}
+
+	err = transact(setup, &env, 2)
+	if err != nil {
+		log.Printf("failure %s", err)
+		t.Fail()
+	}
+}
+
+// run with `go test -test.v -run TestStressDualNoWaitOrderedPrefix`; currently flaky
+func TestStressDualNoWaitOrderedPrefix(t *testing.T) {
+	skipCI(t)
+	setup, err := createSetup(true)
+	if err != nil {
+		log.Fatal("could not create setup", err)
+	}
+	env, err := createStressEnvironment(context.Background(), setup)
+	if err != nil {
+		log.Fatal("could not set up environment", err)
+	}
+
+	env.TransactGasPriceFn = increasingGasPriceFn
+	env.EnsureOrderedPrefixes = true
 
 	err = transact(setup, &env, 2)
 	if err != nil {
@@ -756,3 +778,9 @@ func TestStressExceedEncryptedGasLimit(t *testing.T) {
 		t.Fail()
 	}
 }
+
+// TODO
+
+// invalid tx
+
+// identity suffixes
