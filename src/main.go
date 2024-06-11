@@ -3,9 +3,10 @@ package main
 import (
 	"context"
 	"github.com/rs/zerolog/log"
+	"github.com/shutter-network/encrypting-rpc-server/config"
+	"github.com/shutter-network/encrypting-rpc-server/requests"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
-
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,7 +19,6 @@ import (
 	"github.com/shutter-network/encrypting-rpc-server/server"
 	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
 	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
-
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/cmd/shversion"
@@ -187,6 +187,12 @@ func Start() error {
 }
 
 func main() {
+	cfg, err := config.LoadConfig(".")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to load config")
+	}
+	go requests.FetchNewBlocks(cfg.WebSocketURL)
+
 	status := 0
 	if err := Cmd().Execute(); err != nil {
 		server.Logger.Info().Err(err).Msg("failed running server")

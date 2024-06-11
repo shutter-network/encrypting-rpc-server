@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -28,6 +29,8 @@ type JSONRPCProxy struct {
 func (p *JSONRPCProxy) SelectHandler(method string) http.Handler {
 	// route the eth_namespace to the l2-backend
 	switch method {
+	case "eth_newBlock":
+		return p.processor
 	case "eth_sendTransaction":
 		return p.processor
 	case "eth_sendRawTransaction":
@@ -39,26 +42,38 @@ func (p *JSONRPCProxy) SelectHandler(method string) http.Handler {
 
 func (p *JSONRPCProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
+
 	if err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
+
 	rpcreq := medley.RPCRequest{}
 	err = json.Unmarshal(body, &rpcreq)
 	if err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
+
+	// for debugging
+	requestID := generateRequestID()
+
 	selectedHandler := p.SelectHandler(rpcreq.Method)
+
 	if selectedHandler == p.processor {
-		Logger.Info().Str("method", rpcreq.Method).Msg("dispatching to processor")
+		Logger.Info().Str("requestID", requestID).Str("method", rpcreq.Method).Msg("dispatching to processor")
 	} else {
-		Logger.Info().Str("method", rpcreq.Method).Msg("dispatching to backend")
+		Logger.Info().Str("requestID", requestID).Str("method", rpcreq.Method).Msg("dispatching to backend")
 	}
 
 	// make the body available again before letting reverse proxy handle the rest
 	r.Body = io.NopCloser(bytes.NewBuffer(body))
 	selectedHandler.ServeHTTP(w, r)
+}
+
+func generateRequestID() string {
+	Logger.Info().Msg("generating request ID")
+	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
 type Config struct {

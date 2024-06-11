@@ -9,13 +9,13 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
-	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
-	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/server"
+	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 	medleyKeygen "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/testkeygen"
+	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 	"io"
 	"os"
@@ -204,7 +204,7 @@ func SetupServer(ctx context.Context, t *testing.T) error {
 	}
 	cmd := exec.Command("make", "deploy")
 	cmd.Env = os.Environ()
-    cmd.Env = append(cmd.Env, "ETHERSCAN_API_KEY=''")
+	cmd.Env = append(cmd.Env, "ETHERSCAN_API_KEY=''")
 	wd, err := os.Getwd()
 	if err != nil {
 		log.Info().Msg("can not get wd")

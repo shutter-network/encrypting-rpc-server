@@ -6,14 +6,16 @@ import (
 	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
-	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
-	"math/big"
-
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/shutter-network/encrypting-rpc-server/cache"
+	"github.com/shutter-network/encrypting-rpc-server/requests"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
+	"log"
+	"math/big"
 )
 
 var (
@@ -35,18 +37,47 @@ func ComputeIdentity(prefix []byte, sender common.Address) *shcrypto.EpochID {
 	return shcrypto.ComputeEpochID(identitypreimage.IdentityPreimage(imageBytes).Bytes())
 }
 
+type EthServiceInterface interface {
+	NewBlock(ctx context.Context, blockNumber uint64)
+	SendRawTransaction(ctx context.Context, s string) (*common.Hash, error)
+}
+
 type EthService struct {
 	processor Processor
-	processedTransactions map[common.Hash]bool
+	cache     *cache.Cache
 }
 
 func (s *EthService) InjectProcessor(p Processor) {
 	s.processor = p
-	s.processedTransactions = make(map[common.Hash]bool)
+	s.cache = cache.NewCache(10) // todo make delay factor configurable
 }
 
 func (s *EthService) Name() string {
 	return "eth"
+}
+
+func (s *EthService) NewBlock(ctx context.Context, blockNumber uint64) {
+	Logger.Info().Msg(fmt.Sprintf("Received blockNumber: %d", blockNumber))
+	s.cache.Lock()
+	defer s.cache.Unlock()
+	for key, info := range s.cache.Data {
+		if info.SendingBlock == blockNumber { // todo reorg issue? <=
+			if info.Tx == nil {
+				fmt.Printf("Info is null. Deleting entry.")
+				delete(s.cache.Data, key)
+			} else {
+				fmt.Printf("Sending transaction %s to the sequencer from block listener\n", info.Tx.Hash().Hex())
+				transaction, err := s.SendRawTransaction(ctx, info.Tx.Hash().Hex())
+				if err != nil {
+					Logger.Error().Err(err).Msg("Failed to send transaction")
+					continue
+				}
+				Logger.Info().Msg("Transaction sent: " + transaction.String())
+				info.SendingBlock = blockNumber + s.cache.DelayFactor
+				s.cache.Data[key] = info
+			}
+		}
+	}
 }
 
 func (service *EthService) SendTransaction(ctx context.Context, tx *txtypes.Transaction) (*common.Hash, error) {
@@ -59,7 +90,6 @@ func (service *EthService) SendTransaction(ctx context.Context, tx *txtypes.Tran
 }
 
 func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*common.Hash, error) {
-
 	blockNumber, err := service.processor.Client.BlockNumber(ctx)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
@@ -70,16 +100,22 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
 	tx := new(txtypes.Transaction)
+
 	if err := tx.UnmarshalBinary(b); err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
+	txHash := tx.Hash()
+	txFromAddress, err := SenderAddress(tx, tx.ChainId())
 
-    txHash := tx.Hash()
-	_, sent := service.processedTransactions[txHash]
-    if sent {
-        Logger.Info().Hex("Tx hash", txHash.Bytes()).Msg("Transaction already sequenced")
-        return &txHash, nil
-    }
+	if IsCancellationTransaction(tx, txFromAddress) {
+		log.Println("Detected cancellation transaction, sending it right away...")
+		requests.SendCancelTx(service.processor.Client, service.processor.SigningKey)
+	}
+
+	if !service.cache.UpdateEntry(tx, blockNumber) {
+		Logger.Info().Hex("Tx hash", txHash.Bytes()).Msg("Transaction delayed")
+		return &txHash, nil
+	}
 
 	signer := txtypes.NewLondonSigner(tx.ChainId())
 	fromAddress, err := signer.Sender(tx)
@@ -152,12 +188,13 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
-    Logger.Info().Hex("Incoming tx hash", txHash.Bytes()).Hex("Encrypted tx hash", submitTx.Hash().Bytes()).Msg("Transaction sent")
+	Logger.Info().Hex("Incoming tx hash", txHash.Bytes()).Hex("Encrypted tx hash", submitTx.Hash().Bytes()).Msg("Transaction sent")
 	_, err = bind.WaitMined(ctx, service.processor.Client, submitTx)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
 
-    service.processedTransactions[txHash] = true
+	service.cache.ResetEntry(submitTx.Nonce(), blockNumber)
+
 	return &txHash, nil
 }
