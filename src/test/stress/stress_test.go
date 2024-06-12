@@ -432,6 +432,21 @@ func submitEncryptedTx(ctx context.Context, setup StressSetup, env *StressEnviro
 
 }
 
+func countAndLog(receipts []*types.Receipt) error {
+	c := map[string]uint16{}
+	g := map[string]uint64{}
+	for _, receipt := range receipts {
+		n := receipt.BlockNumber.Text(10)
+		c[n]++
+		g[n] += receipt.GasUsed
+	}
+	log.Println("block\ttxs\tgas used")
+	for n, count := range c {
+		log.Println(n, "\t", count, "\t", g[n])
+	}
+	return nil
+}
+
 func transact(setup StressSetup, env *StressEnvironment, count int) error {
 
 	value := big.NewInt(1) // in wei
@@ -532,6 +547,10 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 		receipts = append(receipts, receipt)
 	}
 	err = env.InclusionConstraints(receipts)
+	if err != nil {
+		return err
+	}
+	err = countAndLog(receipts)
 	return err
 }
 
@@ -737,7 +756,7 @@ func TestStressManyNoWaitOrderedPrefix(t *testing.T) {
 	}
 
 	env.EnsureOrderedPrefixes = true
-	err = transact(setup, &env, 20)
+	err = transact(setup, &env, 100)
 	if err != nil {
 		log.Printf("failure %s", err)
 		t.Fail()
