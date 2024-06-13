@@ -27,6 +27,7 @@ import (
 	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
 	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
+	"golang.org/x/exp/maps"
 )
 
 func skipCI(t *testing.T) {
@@ -441,8 +442,10 @@ func countAndLog(receipts []*types.Receipt) error {
 		g[n] += receipt.GasUsed
 	}
 	log.Println("block\ttxs\tgas used")
-	for n, count := range c {
-		log.Println(n, "\t", count, "\t", g[n])
+	keys := maps.Keys(c)
+	sort.Strings(keys)
+	for _, n := range keys {
+		log.Println(n, "\t", c[n], "\t", g[n])
 	}
 	return nil
 }
