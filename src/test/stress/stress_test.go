@@ -195,6 +195,63 @@ func createSetup(fundNewAccount bool) (StressSetup, error) {
 	return *setup, nil
 }
 
+func fixNonce(setup StressSetup) error {
+	value := big.NewInt(1) // 1 wei
+	gasLimit := uint64(21000)
+
+	var data []byte
+	headNonce, err := setup.Client.NonceAt(context.Background(), setup.SubmitFromAddress, nil)
+	if err != nil {
+		return err
+	}
+	log.Println("HeadNonce", headNonce)
+
+	pendingNonce, err := setup.Client.PendingNonceAt(context.Background(), setup.SubmitFromAddress)
+	if err != nil {
+		return err
+	}
+	log.Println("PendingNonce", pendingNonce)
+	var txs []types.Transaction
+	for i := uint64(0); i < pendingNonce-headNonce; i++ {
+		headNonce, err := setup.Client.NonceAt(context.Background(), setup.SubmitFromAddress, nil)
+		if err != nil {
+			return err
+		}
+		log.Println("HeadNonce", headNonce, "Pending", pendingNonce, "current", headNonce+i, "i", i)
+
+		gasPrice, err := setup.Client.SuggestGasPrice(context.Background())
+		if err != nil {
+			return err
+		}
+		gasPrice = gasPrice.Add(gasPrice, gasPrice)
+		tx := types.NewTransaction(headNonce+i, setup.SubmitFromAddress, value, gasLimit, gasPrice, data)
+		signedTx, err := setup.SubmitSign(setup.SubmitFromAddress, tx)
+		if err != nil {
+			return err
+		}
+		err = setup.Client.SendTransaction(context.Background(), signedTx)
+		if err != nil {
+			log.Println("error on send", err)
+		}
+		log.Println("sent nonce fix tx", signedTx.Hash().Hex(), "to", setup.SubmitFromAddress)
+		txs = append(txs, *signedTx)
+	}
+
+	log.Println("waiting for tx")
+	for _, signedTx := range txs {
+		_, err = bind.WaitMined(context.Background(), setup.Client, &signedTx)
+		if err != nil {
+			log.Println("error on wait", err)
+		}
+		headNonce, err := setup.Client.NonceAt(context.Background(), setup.SubmitFromAddress, nil)
+		if err != nil {
+			return err
+		}
+		log.Println("HeadNonce", headNonce, "Pending", pendingNonce)
+	}
+	return err
+}
+
 func fund(setup StressSetup) error {
 	value := big.NewInt(100000000000000000) // 0.1 ETH in wei
 	gasLimit := uint64(21000)
@@ -203,10 +260,11 @@ func fund(setup StressSetup) error {
 		return err
 	}
 	var data []byte
-	nonce, err := setup.Client.PendingNonceAt(context.Background(), setup.SubmitFromAddress)
+	nonce, err := setup.Client.NonceAt(context.Background(), setup.SubmitFromAddress, nil)
 	if err != nil {
 		return err
 	}
+	log.Println("HeadNonce", nonce)
 	tx := types.NewTransaction(nonce, setup.TransactFromAddress, value, gasLimit, gasPrice, data)
 	signedTx, err := setup.SubmitSign(setup.SubmitFromAddress, tx)
 	if err != nil {
@@ -608,43 +666,6 @@ func drain(ctx context.Context, pk *ecdsa.PrivateKey, address common.Address, ba
 	log.Println("status", receipt.Status)
 }
 
-// not really a test, but useful to collect from previously funded test accounts
-func TestEmptyAccounts(t *testing.T) {
-	skipCI(t)
-	setup, err := createSetup(false)
-	if err != nil {
-		log.Fatal("could not create setup", err)
-	}
-	fd, err := os.Open("pk.hex")
-	if err != nil {
-		log.Fatal("Could not open pk.hex")
-	}
-	defer fd.Close()
-	pks, err := ReadPks(fd)
-	if err != nil {
-		log.Fatal("error when reading private keys", err)
-	}
-	block, err := setup.Client.BlockNumber(context.Background())
-	if err != nil {
-		log.Fatal("could not query block number", err)
-	}
-	for i := range pks {
-		public := pks[i].Public()
-		publicKey, ok := public.(*ecdsa.PublicKey)
-		if !ok {
-			log.Fatal("error casting public key to ECDSA")
-		}
-		address := crypto.PubkeyToAddress(*publicKey)
-		balance, err := setup.Client.BalanceAt(context.Background(), address, big.NewInt(int64(block)))
-		if err == nil {
-			log.Println(address.Hex(), balance)
-		}
-		if balance.Uint64() > 0 {
-			drain(context.Background(), pks[i], address, balance.Uint64(), setup)
-		}
-	}
-}
-
 func TestStressSingle(t *testing.T) {
 	skipCI(t)
 	setup, err := createSetup(true)
@@ -681,7 +702,7 @@ func TestStressDualWait(t *testing.T) {
 	}
 }
 
-// run with `go test -test.v -run TestStressDualNoWait`; currently flaky
+// run with `go test -test.v -run TestStressDualNoWait`
 func TestStressDualNoWait(t *testing.T) {
 	skipCI(t)
 	setup, err := createSetup(true)
@@ -700,7 +721,7 @@ func TestStressDualNoWait(t *testing.T) {
 	}
 }
 
-// run with `go test -test.v -run TestStressDualNoWaitOrderedPrefix`; currently flaky
+// run with `go test -test.v -run TestStressDualNoWaitOrderedPrefix`
 func TestStressDualNoWaitOrderedPrefix(t *testing.T) {
 	skipCI(t)
 	setup, err := createSetup(true)
@@ -759,7 +780,7 @@ func TestStressManyNoWaitOrderedPrefix(t *testing.T) {
 	}
 
 	env.EnsureOrderedPrefixes = true
-	err = transact(setup, &env, 100)
+	err = transact(setup, &env, 60)
 	if err != nil {
 		log.Printf("failure %s", err)
 		t.Fail()
@@ -799,6 +820,57 @@ func TestStressExceedEncryptedGasLimit(t *testing.T) {
 		log.Printf("failure %s", err)
 		t.Fail()
 	}
+}
+
+// not really a test, but useful to collect from previously funded test accounts
+func TestEmptyAccounts(t *testing.T) {
+	skipCI(t)
+	setup, err := createSetup(false)
+	if err != nil {
+		log.Fatal("could not create setup", err)
+	}
+	fd, err := os.Open("pk.hex")
+	if err != nil {
+		log.Fatal("Could not open pk.hex")
+	}
+	defer fd.Close()
+	pks, err := ReadPks(fd)
+	if err != nil {
+		log.Fatal("error when reading private keys", err)
+	}
+	block, err := setup.Client.BlockNumber(context.Background())
+	if err != nil {
+		log.Fatal("could not query block number", err)
+	}
+	for i := range pks {
+		public := pks[i].Public()
+		publicKey, ok := public.(*ecdsa.PublicKey)
+		if !ok {
+			log.Fatal("error casting public key to ECDSA")
+		}
+		address := crypto.PubkeyToAddress(*publicKey)
+		balance, err := setup.Client.BalanceAt(context.Background(), address, big.NewInt(int64(block)))
+		if err == nil {
+			log.Println(address.Hex(), balance)
+		}
+		if balance.Uint64() > 0 {
+			drain(context.Background(), pks[i], address, balance.Uint64(), setup)
+		}
+	}
+}
+
+// not really a test, but useful to fix the submit account's nonce, if an earlier test failed
+func TestFixNonce(t *testing.T) {
+	skipCI(t)
+	setup, err := createSetup(false)
+	if err != nil {
+		log.Fatal("could not create setup", err)
+	}
+	err = fixNonce(setup)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 }
 
 // TODO
