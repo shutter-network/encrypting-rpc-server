@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -819,6 +820,136 @@ func TestStressExceedEncryptedGasLimit(t *testing.T) {
 	if err != nil {
 		log.Printf("failure %s", err)
 		t.Fail()
+	}
+}
+
+func TestInception(t *testing.T) {
+	skipCI(t)
+	setup, err := createSetup(true)
+	if err != nil {
+		log.Fatal("could not create setup", err)
+	}
+	env, err := createStressEnvironment(context.Background(), setup)
+	if err != nil {
+		log.Fatal("could not set up environment", err)
+	}
+	env.InclusionWaitTimeout = time.Duration(time.Minute * 5)
+	ctx := context.Background()
+
+	innerIdentityPrefix, err := createIdentity()
+	if err != nil {
+		log.Fatal(err)
+	}
+	innerGasLimit := 21000
+	if err != nil {
+		log.Fatal(err)
+	}
+	price, err := setup.Client.SuggestGasPrice(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	tip, err := setup.Client.SuggestGasTipCap(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	gasFeeCap, gasTipCap := env.TransactGasPriceFn(price, tip, 0, 1)
+	var data []byte
+	innerTx := types.NewTx(
+		&types.DynamicFeeTx{
+			ChainID:   setup.ChainID,
+			Nonce:     1,
+			GasFeeCap: gasFeeCap,
+			GasTipCap: gasTipCap,
+			Gas:       uint64(innerGasLimit),
+			To:        &setup.SubmitFromAddress,
+			Value:     big.NewInt(1),
+			Data:      data,
+		},
+	)
+
+	signedInnerTx, err := setup.TransactSign(setup.TransactFromAddress, innerTx)
+	innerIdentity := rpc.ComputeIdentity(innerIdentityPrefix[:], setup.TransactFromAddress)
+
+	var buff bytes.Buffer
+	err = signedInnerTx.EncodeRLP(&buff)
+	if err != nil {
+		log.Fatal(err)
+	}
+	sigma, err := shcrypto.RandomSigma(cryptorand.Reader)
+	if err != nil {
+		log.Fatal("could not get sigma bytes", err)
+	}
+
+	encryptedInnerTx := shcrypto.Encrypt(buff.Bytes(), env.EonPublicKey, innerIdentity, sigma)
+
+	abi, err := sequencerBindings.SequencerMetaData.GetAbi()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	input, err := abi.Pack("submitEncryptedTransaction", env.Eon, innerIdentityPrefix, encryptedInnerTx.Marshal(), big.NewInt(int64(signedInnerTx.Gas())))
+	if err != nil {
+		log.Fatal(err)
+	}
+	price, err = setup.Client.SuggestGasPrice(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	tip, err = setup.Client.SuggestGasTipCap(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	gasFeeCap, gasTipCap = env.TransactGasPriceFn(price, tip, 0, 1)
+	sequencerAddress := common.HexToAddress(SEQUENCER_CONTRACT_ADDRESS)
+	middleCallMsg := ethereum.CallMsg{
+		From:  setup.TransactFromAddress,
+		To:    &sequencerAddress,
+		Value: signedInnerTx.Cost(),
+		Data:  input,
+	}
+	middleGasLimit, err := setup.Client.EstimateGas(ctx, middleCallMsg)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	middleTx := types.NewTx(
+		&types.DynamicFeeTx{
+			ChainID:   setup.ChainID,
+			Nonce:     0,
+			GasFeeCap: gasFeeCap,
+			GasTipCap: gasTipCap,
+			Gas:       middleGasLimit,
+			To:        &sequencerAddress,
+			Value:     big.NewInt(0).Sub(signedInnerTx.Cost(), signedInnerTx.Value()),
+			Data:      input,
+		},
+	)
+
+	signedMiddleTx, err := setup.TransactSign(setup.TransactFromAddress, middleTx)
+
+	middleTxEncryptedMsg, middleIdentityPrefix, err := encrypt(ctx, *signedMiddleTx, &env, setup, 1)
+	log.Println("submitting outer. Gas", signedMiddleTx.Gas())
+	opts := &env.SubmitterOpts
+	log.Println("submit nonce", opts.Nonce)
+
+	opts.Value = big.NewInt(0).Sub(signedMiddleTx.Cost(), signedMiddleTx.Value())
+	submitTx, err := setup.Sequencer.SubmitEncryptedTransaction(opts, env.Eon, middleIdentityPrefix, middleTxEncryptedMsg.Marshal(), big.NewInt(int64(signedMiddleTx.Gas())))
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = waitForTx(*submitTx, "outer tx", env.SubmissionWaitTimeout, setup)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(hex.EncodeToString(middleIdentityPrefix[:]))
+	_, err = waitForTx(*signedMiddleTx, "middle tx", env.InclusionWaitTimeout, setup)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(hex.EncodeToString(innerIdentityPrefix[:]))
+	_, err = waitForTx(*signedInnerTx, "inner tx", env.InclusionWaitTimeout, setup)
+	if err != nil {
+		log.Fatal(err)
 	}
 }
 
