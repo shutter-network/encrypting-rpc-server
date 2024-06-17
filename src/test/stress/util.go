@@ -203,3 +203,18 @@ func drain(ctx context.Context, pk *ecdsa.PrivateKey, address common.Address, ba
 	}
 	log.Println("status", receipt.Status)
 }
+
+func createRandomAddress() (common.Address, error) {
+	var address common.Address
+	privateKey, err := crypto.GenerateKey()
+	if err != nil {
+		return address, fmt.Errorf("could not generate random key %v", err)
+	}
+	publicKey := privateKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		return address, fmt.Errorf("cannot assert type: publicKey is not of type *ecdsa.PublicKey")
+	}
+	address = crypto.PubkeyToAddress(*publicKeyECDSA)
+	return address, nil
+}
