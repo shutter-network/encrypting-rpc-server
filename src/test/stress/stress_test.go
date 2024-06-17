@@ -316,7 +316,7 @@ func createIdentity() (shcrypto.Block, error) {
 	return identityPrefix, nil
 }
 
-func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, submitter common.Address, count int) (*shcrypto.EncryptedMessage, shcrypto.Block, error) {
+func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, submitter common.Address, i int) (*shcrypto.EncryptedMessage, shcrypto.Block, error) {
 
 	sigma, err := shcrypto.RandomSigma(cryptorand.Reader)
 	if err != nil {
@@ -324,8 +324,8 @@ func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, 
 	}
 
 	var identityPrefix shcrypto.Block
-	if count < len(env.IdentityPrefixes) {
-		identityPrefix = env.IdentityPrefixes[count]
+	if i < len(env.IdentityPrefixes) {
+		identityPrefix = env.IdentityPrefixes[i]
 	} else {
 		identityPrefix, err = createIdentity()
 
@@ -351,14 +351,14 @@ func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, 
 	return encryptedTx, identityPrefix, nil
 }
 
-func submitEncryptedTx(ctx context.Context, setup StressSetup, env *StressEnvironment, tx types.Transaction, count int) (*types.Transaction, error) {
+func submitEncryptedTx(ctx context.Context, setup StressSetup, env *StressEnvironment, tx types.Transaction, i int) (*types.Transaction, error) {
 
 	opts := env.SubmitterOpts
 	log.Println("submit nonce", opts.Nonce)
 
 	opts.Value = big.NewInt(0).Sub(tx.Cost(), tx.Value())
 
-	encryptedTx, identityPrefix, err := encrypt(ctx, tx, env, setup.SubmitFromAddress, count)
+	encryptedTx, identityPrefix, err := encrypt(ctx, tx, env, setup.SubmitFromAddress, i)
 	if err != nil {
 		return nil, fmt.Errorf("could not encrypt %v", err)
 	}
