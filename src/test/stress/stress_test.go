@@ -789,9 +789,3 @@ func TestFixNonce(t *testing.T) {
 	}
 
 }
-
-// TODO
-
-// invalid tx
-
-// identity suffixes
