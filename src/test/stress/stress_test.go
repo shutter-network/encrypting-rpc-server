@@ -1,7 +1,6 @@
 package stress
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/ecdsa"
@@ -9,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"math/big"
 	"math/rand"
@@ -28,7 +26,6 @@ import (
 	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
 	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
-	"golang.org/x/exp/maps"
 )
 
 func skipCI(t *testing.T) {
@@ -38,35 +35,21 @@ func skipCI(t *testing.T) {
 }
 
 // the ethereum address of the key broadcast contract
-const KEY_BROADCAST_CONTRACT_ADDRESS = "0x1FD85EfeC5FC18f2f688f82489468222dfC36d6D"
+const KeyBroadcastContractAddress = "0x1FD85EfeC5FC18f2f688f82489468222dfC36d6D"
 
 // the ethereum address of the sequencer contract
-const SEQUENCER_CONTRACT_ADDRESS = "0xd073BD5A717Dce1832890f2Fdd9F4fBC4555e41A"
+const SequencerContractAddress = "0xd073BD5A717Dce1832890f2Fdd9F4fBC4555e41A"
 
 // the ethereum address of the keyper set manager contract
-const KEYPER_SET_MANAGER_CONTRACT_ADDRESS = "0x7Fbc29C682f59f809583bFEE0fc50F1e4eb77774"
+const KeyperSetManagerContractAddress = "0x7Fbc29C682f59f809583bFEE0fc50F1e4eb77774"
+
+const RpcUrl = "https://rpc.chiado.gnosis.gateway.fm"
 
 const KeyperSetChangeLookAhead = 2
 
-// contains all the setup required to interact with the chain
-type StressSetup struct {
-	Client               *ethclient.Client
-	SignerForChain       types.Signer
-	ChainID              *big.Int
-	SubmitSign           bind.SignerFn
-	SubmitPrivateKey     *ecdsa.PrivateKey
-	SubmitFromAddress    common.Address
-	TransactSign         bind.SignerFn
-	TransactPrivateKey   *ecdsa.PrivateKey
-	TransactFromAddress  common.Address
-	Sequencer            sequencerBindings.Sequencer
-	KeyperSetManager     shopContractBindings.KeyperSetManager
-	KeyBroadcastContract shopContractBindings.KeyBroadcastContract
-}
-
 func createSetup(fundNewAccount bool) (StressSetup, error) {
 	setup := new(StressSetup)
-	client, err := ethclient.Dial("https://rpc.chiado.gnosis.gateway.fm")
+	client, err := ethclient.Dial(RpcUrl)
 	if err != nil {
 		return *setup, fmt.Errorf("could not create client %v", err)
 	}
@@ -173,20 +156,20 @@ func createSetup(fundNewAccount bool) (StressSetup, error) {
 		}
 		log.Println("Funding complete")
 	}
-	keyperSetManagerContract, err := shopContractBindings.NewKeyperSetManager(common.HexToAddress(KEYPER_SET_MANAGER_CONTRACT_ADDRESS), client)
+	keyperSetManagerContract, err := shopContractBindings.NewKeyperSetManager(common.HexToAddress(KeyperSetManagerContractAddress), client)
 	if err != nil {
 		return *setup, fmt.Errorf("can not get KeyperSetManager %v", err)
 	}
 	setup.KeyperSetManager = *keyperSetManagerContract
 
-	keyBroadcastContract, err := shopContractBindings.NewKeyBroadcastContract(common.HexToAddress(KEY_BROADCAST_CONTRACT_ADDRESS), client)
+	keyBroadcastContract, err := shopContractBindings.NewKeyBroadcastContract(common.HexToAddress(KeyBroadcastContractAddress), client)
 	if err != nil {
 		return *setup, fmt.Errorf("can not get KeyBrodcastContract %v", err)
 	}
 
 	setup.KeyBroadcastContract = *keyBroadcastContract
 
-	sequencerContract, err := sequencerBindings.NewSequencer(common.HexToAddress(SEQUENCER_CONTRACT_ADDRESS), client)
+	sequencerContract, err := sequencerBindings.NewSequencer(common.HexToAddress(SequencerContractAddress), client)
 	if err != nil {
 		return *setup, fmt.Errorf("can not get SequencerContract %v", err)
 	}
@@ -194,63 +177,6 @@ func createSetup(fundNewAccount bool) (StressSetup, error) {
 	setup.Sequencer = *sequencerContract
 
 	return *setup, nil
-}
-
-func fixNonce(setup StressSetup) error {
-	value := big.NewInt(1) // 1 wei
-	gasLimit := uint64(21000)
-
-	var data []byte
-	headNonce, err := setup.Client.NonceAt(context.Background(), setup.SubmitFromAddress, nil)
-	if err != nil {
-		return err
-	}
-	log.Println("HeadNonce", headNonce)
-
-	pendingNonce, err := setup.Client.PendingNonceAt(context.Background(), setup.SubmitFromAddress)
-	if err != nil {
-		return err
-	}
-	log.Println("PendingNonce", pendingNonce)
-	var txs []types.Transaction
-	for i := uint64(0); i < pendingNonce-headNonce; i++ {
-		headNonce, err := setup.Client.NonceAt(context.Background(), setup.SubmitFromAddress, nil)
-		if err != nil {
-			return err
-		}
-		log.Println("HeadNonce", headNonce, "Pending", pendingNonce, "current", headNonce+i, "i", i)
-
-		gasPrice, err := setup.Client.SuggestGasPrice(context.Background())
-		if err != nil {
-			return err
-		}
-		gasPrice = gasPrice.Add(gasPrice, gasPrice)
-		tx := types.NewTransaction(headNonce+i, setup.SubmitFromAddress, value, gasLimit, gasPrice, data)
-		signedTx, err := setup.SubmitSign(setup.SubmitFromAddress, tx)
-		if err != nil {
-			return err
-		}
-		err = setup.Client.SendTransaction(context.Background(), signedTx)
-		if err != nil {
-			log.Println("error on send", err)
-		}
-		log.Println("sent nonce fix tx", signedTx.Hash().Hex(), "to", setup.SubmitFromAddress)
-		txs = append(txs, *signedTx)
-	}
-
-	log.Println("waiting for tx")
-	for _, signedTx := range txs {
-		_, err = bind.WaitMined(context.Background(), setup.Client, &signedTx)
-		if err != nil {
-			log.Println("error on wait", err)
-		}
-		headNonce, err := setup.Client.NonceAt(context.Background(), setup.SubmitFromAddress, nil)
-		if err != nil {
-			return err
-		}
-		log.Println("HeadNonce", headNonce, "Pending", pendingNonce)
-	}
-	return err
 }
 
 func fund(setup StressSetup) error {
@@ -279,11 +205,6 @@ func fund(setup StressSetup) error {
 	_, err = bind.WaitMined(context.Background(), setup.Client, signedTx)
 	return err
 }
-
-type GasFeeCap *big.Int
-type GasTipCap *big.Int
-
-type GasPriceFn func(suggestedGasTipCap *big.Int, suggestedGasPrice *big.Int, i int, count int) (GasFeeCap, GasTipCap)
 
 func defaultGasPriceFn(suggestedGasTipCap *big.Int, suggestedGasPrice *big.Int, i int, count int) (GasFeeCap, GasTipCap) {
 	feeCapAndTipCap := big.NewInt(0).Add(suggestedGasPrice, suggestedGasTipCap)
@@ -318,32 +239,8 @@ func decreasingGasPriceFn(suggestedGasTipCap *big.Int, suggestedGasPrice *big.In
 	return gasFeeCap, suggestedGasTipCap
 }
 
-type GasLimitFn func(value *big.Int, data []byte, toAddress *common.Address, i int, count int) uint64
-
 func defaultGasLimitFn(value *big.Int, data []byte, toAddress *common.Address, i int, count int) uint64 {
 	return uint64(21000)
-}
-
-type ConstraintFn func(inclusions []*types.Receipt) error
-
-// contains the context for the current stress test to create transactions
-type StressEnvironment struct {
-	TransacterOpts        bind.TransactOpts
-	TransactStartingNonce *big.Int
-	TransactGasPriceFn    GasPriceFn
-	TransactGasLimitFn    GasLimitFn
-	InclusionWaitTimeout  time.Duration
-	InclusionConstraints  ConstraintFn
-	SubmitterOpts         bind.TransactOpts
-	SubmitStartingNonce   *big.Int
-	SubmissionWaitTimeout time.Duration
-	Eon                   uint64
-	EonPublicKey          *shcrypto.EonPublicKey
-	WaitOnEverySubmit     bool
-	// work around a bug, where decryption keys are tried in the order of identityPrefixes
-	EnsureOrderedPrefixes bool
-	ShufflePrefixes       bool
-	IdentityPrefixes      []shcrypto.Block
 }
 
 func createStressEnvironment(ctx context.Context, setup StressSetup) (StressEnvironment, error) {
@@ -456,21 +353,6 @@ func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, 
 	return encryptedTx, identityPrefix, nil
 }
 
-func waitForTx(tx types.Transaction, description string, timeout time.Duration, setup StressSetup) (*types.Receipt, error) {
-	log.Println("waiting for "+description+" ", tx.Hash().Hex())
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	receipt, err := bind.WaitMined(ctx, setup.Client, &tx)
-	if err != nil {
-		return nil, fmt.Errorf("error on WaitMined %s", err)
-	}
-	log.Println("status", receipt.Status, "block", receipt.BlockNumber)
-	if receipt.Status != 1 {
-		return nil, fmt.Errorf("included tx failed")
-	}
-	return receipt, nil
-}
-
 func submitEncryptedTx(ctx context.Context, setup StressSetup, env *StressEnvironment, tx types.Transaction, count int) (*types.Transaction, error) {
 
 	opts := env.SubmitterOpts
@@ -490,23 +372,6 @@ func submitEncryptedTx(ctx context.Context, setup StressSetup, env *StressEnviro
 	log.Println("submitted identityPrefix ", hex.EncodeToString(identityPrefix[:]))
 	return submitTx, nil
 
-}
-
-func countAndLog(receipts []*types.Receipt) error {
-	c := map[string]uint16{}
-	g := map[string]uint64{}
-	for _, receipt := range receipts {
-		n := receipt.BlockNumber.Text(10)
-		c[n]++
-		g[n] += receipt.GasUsed
-	}
-	log.Println("block\ttxs\tgas used")
-	keys := maps.Keys(c)
-	sort.Strings(keys)
-	for _, n := range keys {
-		log.Println(n, "\t", c[n], "\t", g[n])
-	}
-	return nil
 }
 
 func transact(setup StressSetup, env *StressEnvironment, count int) error {
@@ -614,23 +479,6 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 	}
 	err = countAndLog(receipts)
 	return err
-}
-
-func ReadPks(r io.Reader) ([]*ecdsa.PrivateKey, error) {
-	scanner := bufio.NewScanner(r)
-	scanner.Split(bufio.ScanWords)
-	var result []*ecdsa.PrivateKey
-	for scanner.Scan() {
-		x := scanner.Text()
-		if len(x) == 64 {
-			pk, err := crypto.HexToECDSA(x)
-			if err != nil {
-				return result, err
-			}
-			result = append(result, pk)
-		}
-	}
-	return result, scanner.Err()
 }
 
 func drain(ctx context.Context, pk *ecdsa.PrivateKey, address common.Address, balance uint64, setup StressSetup) {
@@ -781,7 +629,7 @@ func TestStressManyNoWaitOrderedPrefix(t *testing.T) {
 	}
 
 	env.EnsureOrderedPrefixes = true
-	err = transact(setup, &env, 60)
+	err = transact(setup, &env, 80)
 	if err != nil {
 		log.Printf("failure %s", err)
 		t.Fail()
@@ -833,7 +681,6 @@ func TestInception(t *testing.T) {
 	if err != nil {
 		log.Fatal("could not set up environment", err)
 	}
-	env.InclusionWaitTimeout = time.Duration(time.Minute * 5)
 	ctx := context.Background()
 
 	innerIdentityPrefix, err := createIdentity()
@@ -900,7 +747,7 @@ func TestInception(t *testing.T) {
 		log.Fatal(err)
 	}
 	gasFeeCap, gasTipCap = env.TransactGasPriceFn(price, tip, 0, 1)
-	sequencerAddress := common.HexToAddress(SEQUENCER_CONTRACT_ADDRESS)
+	sequencerAddress := common.HexToAddress(SequencerContractAddress)
 	middleCallMsg := ethereum.CallMsg{
 		From:  setup.TransactFromAddress,
 		To:    &sequencerAddress,
@@ -937,20 +784,21 @@ func TestInception(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = waitForTx(*submitTx, "outer tx", env.SubmissionWaitTimeout, setup)
+	submitReceipt, err := waitForTx(*submitTx, "outer tx", env.SubmissionWaitTimeout, setup)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Println(hex.EncodeToString(middleIdentityPrefix[:]))
-	_, err = waitForTx(*signedMiddleTx, "middle tx", env.InclusionWaitTimeout, setup)
+	middleReceipt, err := waitForTx(*signedMiddleTx, "middle tx", env.InclusionWaitTimeout, setup)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Println(hex.EncodeToString(innerIdentityPrefix[:]))
-	_, err = waitForTx(*signedInnerTx, "inner tx", env.InclusionWaitTimeout, setup)
+	innerReceipt, err := waitForTx(*signedInnerTx, "inner tx", env.InclusionWaitTimeout, setup)
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Println("inner gas", innerReceipt.GasUsed, "middle gas", middleReceipt.GasUsed, "outer gas", submitReceipt.GasUsed)
 }
 
 // not really a test, but useful to collect from previously funded test accounts
