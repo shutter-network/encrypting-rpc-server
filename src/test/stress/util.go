@@ -52,9 +52,6 @@ type StressEnvironment struct {
 	Eon                   uint64
 	EonPublicKey          *shcrypto.EonPublicKey
 	WaitOnEverySubmit     bool
-	// work around a bug, where decryption keys are tried in the order of identityPrefixes
-	EnsureOrderedPrefixes bool
-	ShufflePrefixes       bool
 	IdentityPrefixes      []shcrypto.Block
 }
 

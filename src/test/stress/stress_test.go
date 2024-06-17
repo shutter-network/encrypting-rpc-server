@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"math/rand"
 	"os"
 	"sort"
 	"testing"
@@ -263,7 +262,6 @@ func createStressEnvironment(ctx context.Context, setup StressSetup) (StressEnvi
 		Eon:                   eon,
 		EonPublicKey:          eonKey,
 		WaitOnEverySubmit:     false,
-		EnsureOrderedPrefixes: false,
 	}
 	if err != nil {
 		return environment, fmt.Errorf("could not get eonKey %v", err)
@@ -400,22 +398,7 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 		}
 		identityPrefixes = append(identityPrefixes, identity)
 	}
-	if env.EnsureOrderedPrefixes && env.ShufflePrefixes {
-		log.Fatal("test setup incorrect: EnsureOrderedPrefixes and ShufflePrefixes can't both be set.")
-	}
-	if env.EnsureOrderedPrefixes {
-		sort.Slice(identityPrefixes, func(i, j int) bool {
-			return hex.EncodeToString(identityPrefixes[i][:]) < hex.EncodeToString(identityPrefixes[j][:])
-		})
-	}
-	if env.ShufflePrefixes {
-		dest := make([]shcrypto.Block, len(identityPrefixes))
-		perm := rand.Perm(len(identityPrefixes))
-		for i, v := range perm {
-			dest[v] = identityPrefixes[i]
-		}
-		identityPrefixes = dest
-	}
+
 	env.IdentityPrefixes = identityPrefixes
 
 	for i := 0; i < count; i++ {
@@ -481,40 +464,6 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 	return err
 }
 
-func drain(ctx context.Context, pk *ecdsa.PrivateKey, address common.Address, balance uint64, setup StressSetup) {
-	gasPrice, err := setup.Client.SuggestGasPrice(ctx)
-	if err != nil {
-		log.Println("could not query gasPrice")
-	}
-	gasLimit := uint64(21000)
-	remaining := balance - gasLimit*gasPrice.Uint64()
-	data := make([]byte, 0)
-
-	nonce, err := setup.Client.PendingNonceAt(ctx, address)
-	if err != nil {
-		log.Println("could not query nonce", err)
-	}
-	tx := types.NewTransaction(nonce, setup.SubmitFromAddress, big.NewInt(int64(remaining)), gasLimit, gasPrice, data)
-
-	signature, err := crypto.Sign(setup.SignerForChain.Hash(tx).Bytes(), pk)
-	if err != nil {
-		log.Println("could not create signature", err)
-	}
-	signed, err := tx.WithSignature(setup.SignerForChain, signature)
-	if err != nil {
-		log.Println("could not add signature", err)
-	}
-	err = setup.Client.SendTransaction(ctx, signed)
-	if err != nil {
-		log.Println("failed to send", err)
-	}
-	receipt, err := bind.WaitMined(ctx, setup.Client, signed)
-	if err != nil {
-		log.Println("failed to wait for tx", err)
-	}
-	log.Println("status", receipt.Status)
-}
-
 func TestStressSingle(t *testing.T) {
 	skipCI(t)
 	setup, err := createSetup(true)
@@ -570,28 +519,6 @@ func TestStressDualNoWait(t *testing.T) {
 	}
 }
 
-// run with `go test -test.v -run TestStressDualNoWaitOrderedPrefix`
-func TestStressDualNoWaitOrderedPrefix(t *testing.T) {
-	skipCI(t)
-	setup, err := createSetup(true)
-	if err != nil {
-		log.Fatal("could not create setup", err)
-	}
-	env, err := createStressEnvironment(context.Background(), setup)
-	if err != nil {
-		log.Fatal("could not set up environment", err)
-	}
-
-	env.TransactGasPriceFn = increasingGasPriceFn
-	env.EnsureOrderedPrefixes = true
-
-	err = transact(setup, &env, 2)
-	if err != nil {
-		log.Printf("failure %s", err)
-		t.Fail()
-	}
-}
-
 // send two transactions in the same block by the same sender with the same identityPrefix
 func TestStressDualDuplicatePrefix(t *testing.T) {
 	skipCI(t)
@@ -616,8 +543,8 @@ func TestStressDualDuplicatePrefix(t *testing.T) {
 	}
 }
 
-// send many transactions as quickly as possible, but ensure the identityPrefixes are ordered (low to high)
-func TestStressManyNoWaitOrderedPrefix(t *testing.T) {
+// send many transactions as quickly as possible.
+func TestStressManyNoWait(t *testing.T) {
 	skipCI(t)
 	setup, err := createSetup(true)
 	if err != nil {
@@ -628,8 +555,7 @@ func TestStressManyNoWaitOrderedPrefix(t *testing.T) {
 		log.Fatal("could not set up environment", err)
 	}
 
-	env.EnsureOrderedPrefixes = true
-	err = transact(setup, &env, 80)
+	err = transact(setup, &env, 47)
 	if err != nil {
 		log.Printf("failure %s", err)
 		t.Fail()
@@ -647,7 +573,6 @@ func TestStressExceedEncryptedGasLimit(t *testing.T) {
 		log.Fatal("could not set up environment", err)
 	}
 
-	env.EnsureOrderedPrefixes = true
 	env.TransactGasLimitFn = func(value *big.Int, data []byte, toAddress *common.Address, i, count int) uint64 {
 		// last consumes over the limit
 		if count-i == 1 {
