@@ -53,6 +53,7 @@ type StressEnvironment struct {
 	EonPublicKey          *shcrypto.EonPublicKey
 	WaitOnEverySubmit     bool
 	IdentityPrefixes      []shcrypto.Block
+	RandomIdentitySuffix  bool
 }
 
 type GasFeeCap *big.Int

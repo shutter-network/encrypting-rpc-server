@@ -262,6 +262,7 @@ func createStressEnvironment(ctx context.Context, setup StressSetup) (StressEnvi
 		Eon:                   eon,
 		EonPublicKey:          eonKey,
 		WaitOnEverySubmit:     false,
+		RandomIdentitySuffix:  false,
 	}
 	if err != nil {
 		return environment, fmt.Errorf("could not get eonKey %v", err)
@@ -329,6 +330,12 @@ func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, 
 	} else {
 		identityPrefix, err = createIdentity()
 
+		if err != nil {
+			return nil, identityPrefix, err
+		}
+	}
+	if env.RandomIdentitySuffix {
+		submitter, err = createRandomAddress()
 		if err != nil {
 			return nil, identityPrefix, err
 		}
@@ -596,7 +603,7 @@ func TestStressExceedEncryptedGasLimit(t *testing.T) {
 	}
 }
 
-func TestInceptionCorrectSuffix(t *testing.T) {
+func TestInception(t *testing.T) {
 	skipCI(t)
 	setup, err := createSetup(true)
 	if err != nil {
@@ -713,7 +720,7 @@ func TestInceptionCorrectSuffix(t *testing.T) {
 	log.Println("inner gas", innerReceipt.GasUsed, "middle gas", middleReceipt.GasUsed, "outer gas", submitReceipt.GasUsed)
 }
 
-func TestInceptionIncorrectSuffix(t *testing.T) {
+func TestIncorrectIdentitySuffix(t *testing.T) {
 	skipCI(t)
 	setup, err := createSetup(true)
 	if err != nil {
@@ -723,117 +730,13 @@ func TestInceptionIncorrectSuffix(t *testing.T) {
 	if err != nil {
 		log.Fatal("could not set up environment", err)
 	}
-	ctx := context.Background()
+	env.RandomIdentitySuffix = true
 
-	innerGasLimit := 21000
-	if err != nil {
-		log.Fatal(err)
+	err = transact(setup, &env, 1)
+	if err == nil {
+		log.Println("This must time out!")
+		t.Fail()
 	}
-	price, err := setup.Client.SuggestGasPrice(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tip, err := setup.Client.SuggestGasTipCap(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-	gasFeeCap, gasTipCap := env.TransactGasPriceFn(price, tip, 0, 1)
-	var data []byte
-	innerTx := types.NewTx(
-		&types.DynamicFeeTx{
-			ChainID:   setup.ChainID,
-			Nonce:     1,
-			GasFeeCap: gasFeeCap,
-			GasTipCap: gasTipCap,
-			Gas:       uint64(innerGasLimit),
-			To:        &setup.SubmitFromAddress,
-			Value:     big.NewInt(1),
-			Data:      data,
-		},
-	)
-
-	signedInnerTx, err := setup.TransactSign(setup.TransactFromAddress, innerTx)
-
-	randomSubmitter, err := createRandomAddress()
-	if err != nil {
-		log.Fatal(err)
-	}
-	encryptedInnerTx, innerIdentityPrefix, err := encrypt(ctx, *signedInnerTx, &env, randomSubmitter, 1)
-
-	abi, err := sequencerBindings.SequencerMetaData.GetAbi()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	input, err := abi.Pack("submitEncryptedTransaction", env.Eon, innerIdentityPrefix, encryptedInnerTx.Marshal(), big.NewInt(int64(signedInnerTx.Gas())))
-	if err != nil {
-		log.Fatal(err)
-	}
-	price, err = setup.Client.SuggestGasPrice(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-	tip, err = setup.Client.SuggestGasTipCap(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-	gasFeeCap, gasTipCap = env.TransactGasPriceFn(price, tip, 0, 1)
-	sequencerAddress := common.HexToAddress(SequencerContractAddress)
-	middleCallMsg := ethereum.CallMsg{
-		From:  setup.TransactFromAddress,
-		To:    &sequencerAddress,
-		Value: signedInnerTx.Cost(),
-		Data:  input,
-	}
-	middleGasLimit, err := setup.Client.EstimateGas(ctx, middleCallMsg)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	middleTx := types.NewTx(
-		&types.DynamicFeeTx{
-			ChainID:   setup.ChainID,
-			Nonce:     0,
-			GasFeeCap: gasFeeCap,
-			GasTipCap: gasTipCap,
-			Gas:       middleGasLimit,
-			To:        &sequencerAddress,
-			Value:     big.NewInt(0).Sub(signedInnerTx.Cost(), signedInnerTx.Value()),
-			Data:      input,
-		},
-	)
-
-	signedMiddleTx, err := setup.TransactSign(setup.TransactFromAddress, middleTx)
-
-	randomSubmitter, err = createRandomAddress()
-	if err != nil {
-		log.Fatal(err)
-	}
-	middleTxEncryptedMsg, middleIdentityPrefix, err := encrypt(ctx, *signedMiddleTx, &env, randomSubmitter, 1)
-	log.Println("submitting outer. Gas", signedMiddleTx.Gas())
-	opts := &env.SubmitterOpts
-	log.Println("submit nonce", opts.Nonce)
-
-	opts.Value = big.NewInt(0).Sub(signedMiddleTx.Cost(), signedMiddleTx.Value())
-	submitTx, err := setup.Sequencer.SubmitEncryptedTransaction(opts, env.Eon, middleIdentityPrefix, middleTxEncryptedMsg.Marshal(), big.NewInt(int64(signedMiddleTx.Gas())))
-	if err != nil {
-		log.Fatal(err)
-	}
-	submitReceipt, err := waitForTx(*submitTx, "outer tx", env.SubmissionWaitTimeout, setup)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println(hex.EncodeToString(middleIdentityPrefix[:]))
-	middleReceipt, err := waitForTx(*signedMiddleTx, "middle tx", env.InclusionWaitTimeout, setup)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println(hex.EncodeToString(innerIdentityPrefix[:]))
-	innerReceipt, err := waitForTx(*signedInnerTx, "inner tx", env.InclusionWaitTimeout, setup)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println("inner gas", innerReceipt.GasUsed, "middle gas", middleReceipt.GasUsed, "outer gas", submitReceipt.GasUsed)
 }
 
 // not really a test, but useful to collect from previously funded test accounts
