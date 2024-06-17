@@ -316,7 +316,7 @@ func createIdentity() (shcrypto.Block, error) {
 	return identityPrefix, nil
 }
 
-func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, setup StressSetup, count int) (*shcrypto.EncryptedMessage, shcrypto.Block, error) {
+func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, submitter common.Address, count int) (*shcrypto.EncryptedMessage, shcrypto.Block, error) {
 
 	sigma, err := shcrypto.RandomSigma(cryptorand.Reader)
 	if err != nil {
@@ -334,7 +334,7 @@ func encrypt(ctx context.Context, tx types.Transaction, env *StressEnvironment, 
 		}
 	}
 
-	identity := rpc.ComputeIdentity(identityPrefix[:], setup.SubmitFromAddress)
+	identity := rpc.ComputeIdentity(identityPrefix[:], submitter)
 
 	var buff bytes.Buffer
 	err = tx.EncodeRLP(&buff)
@@ -358,7 +358,7 @@ func submitEncryptedTx(ctx context.Context, setup StressSetup, env *StressEnviro
 
 	opts.Value = big.NewInt(0).Sub(tx.Cost(), tx.Value())
 
-	encryptedTx, identityPrefix, err := encrypt(ctx, tx, env, setup, count)
+	encryptedTx, identityPrefix, err := encrypt(ctx, tx, env, setup.SubmitFromAddress, count)
 	if err != nil {
 		return nil, fmt.Errorf("could not encrypt %v", err)
 	}
@@ -608,10 +608,6 @@ func TestInception(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	innerIdentityPrefix, err := createIdentity()
-	if err != nil {
-		log.Fatal(err)
-	}
 	innerGasLimit := 21000
 	if err != nil {
 		log.Fatal(err)
@@ -640,19 +636,7 @@ func TestInception(t *testing.T) {
 	)
 
 	signedInnerTx, err := setup.TransactSign(setup.TransactFromAddress, innerTx)
-	innerIdentity := rpc.ComputeIdentity(innerIdentityPrefix[:], setup.TransactFromAddress)
-
-	var buff bytes.Buffer
-	err = signedInnerTx.EncodeRLP(&buff)
-	if err != nil {
-		log.Fatal(err)
-	}
-	sigma, err := shcrypto.RandomSigma(cryptorand.Reader)
-	if err != nil {
-		log.Fatal("could not get sigma bytes", err)
-	}
-
-	encryptedInnerTx := shcrypto.Encrypt(buff.Bytes(), env.EonPublicKey, innerIdentity, sigma)
+	encryptedInnerTx, innerIdentityPrefix, err := encrypt(ctx, *signedInnerTx, &env, setup.TransactFromAddress, 1)
 
 	abi, err := sequencerBindings.SequencerMetaData.GetAbi()
 	if err != nil {
@@ -699,7 +683,7 @@ func TestInception(t *testing.T) {
 
 	signedMiddleTx, err := setup.TransactSign(setup.TransactFromAddress, middleTx)
 
-	middleTxEncryptedMsg, middleIdentityPrefix, err := encrypt(ctx, *signedMiddleTx, &env, setup, 1)
+	middleTxEncryptedMsg, middleIdentityPrefix, err := encrypt(ctx, *signedMiddleTx, &env, setup.SubmitFromAddress, 1)
 	log.Println("submitting outer. Gas", signedMiddleTx.Gas())
 	opts := &env.SubmitterOpts
 	log.Println("submit nonce", opts.Nonce)
