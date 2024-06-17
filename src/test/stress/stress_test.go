@@ -25,6 +25,7 @@ import (
 	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
 	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
+	"gotest.tools/assert"
 )
 
 func skipCI(t *testing.T) {
@@ -473,6 +474,7 @@ func transact(setup StressSetup, env *StressEnvironment, count int) error {
 	return err
 }
 
+// send a single transaction
 func TestStressSingle(t *testing.T) {
 	skipCI(t)
 	setup, err := createSetup(true)
@@ -484,12 +486,10 @@ func TestStressSingle(t *testing.T) {
 		log.Fatal("could not set up environment", err)
 	}
 	err = transact(setup, &env, 1)
-	if err != nil {
-		log.Printf("failure %s", err)
-		t.Fail()
-	}
+	assert.NilError(t, err, "not included")
 }
 
+// send two transactions but wait for each submission to the sequencer possible
 func TestStressDualWait(t *testing.T) {
 	skipCI(t)
 	setup, err := createSetup(true)
@@ -503,13 +503,10 @@ func TestStressDualWait(t *testing.T) {
 	env.WaitOnEverySubmit = true
 
 	err = transact(setup, &env, 2)
-	if err != nil {
-		log.Printf("failure %s", err)
-		t.Fail()
-	}
+	assert.NilError(t, err, "not included")
 }
 
-// run with `go test -test.v -run TestStressDualNoWait`
+// send two transactions as quickly as possible
 func TestStressDualNoWait(t *testing.T) {
 	skipCI(t)
 	setup, err := createSetup(true)
@@ -522,10 +519,7 @@ func TestStressDualNoWait(t *testing.T) {
 	}
 
 	err = transact(setup, &env, 2)
-	if err != nil {
-		log.Printf("failure %s", err)
-		t.Fail()
-	}
+	assert.NilError(t, err, "not included")
 }
 
 // send two transactions in the same block by the same sender with the same identityPrefix
@@ -549,10 +543,7 @@ func TestStressDualDuplicatePrefix(t *testing.T) {
 	env.IdentityPrefixes = prefixes
 
 	err = transact(setup, &env, 2)
-	if err != nil {
-		log.Printf("failure %s", err)
-		t.Fail()
-	}
+	assert.NilError(t, err, "not included")
 }
 
 // send many transactions as quickly as possible.
@@ -568,12 +559,10 @@ func TestStressManyNoWait(t *testing.T) {
 	}
 
 	err = transact(setup, &env, 47)
-	if err != nil {
-		log.Printf("failure %s", err)
-		t.Fail()
-	}
+	assert.NilError(t, err, "not included")
 }
 
+// test that tx using together more than ENCYRPTED_GAS_LIMIT end up in different blocks
 func TestStressExceedEncryptedGasLimit(t *testing.T) {
 	skipCI(t)
 	setup, err := createSetup(true)
@@ -602,12 +591,10 @@ func TestStressExceedEncryptedGasLimit(t *testing.T) {
 		return nil
 	}
 	err = transact(setup, &env, 2)
-	if err != nil {
-		log.Printf("failure %s", err)
-		t.Fail()
-	}
+	assert.NilError(t, err, "failed")
 }
 
+// test nested shutter transactions
 func TestInception(t *testing.T) {
 	skipCI(t)
 	setup, err := createSetup(true)
@@ -751,10 +738,7 @@ func TestIncorrectIdentitySuffix(t *testing.T) {
 	env.RandomIdentitySuffix = true
 
 	err = transact(setup, &env, 1)
-	if err == nil {
-		log.Println("This must time out!")
-		t.Fail()
-	}
+	assert.Error(t, err, "error on WaitMined context deadline exceeded", "this must time out")
 }
 
 // not really a test, but useful to collect from previously funded test accounts
@@ -805,5 +789,4 @@ func TestFixNonce(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 }
