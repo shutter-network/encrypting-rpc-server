@@ -10,11 +10,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/cache"
 	"github.com/shutter-network/encrypting-rpc-server/requests"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
-	"log"
 	"math/big"
 )
 
@@ -44,12 +44,17 @@ type EthServiceInterface interface {
 
 type EthService struct {
 	processor Processor
-	cache     *cache.Cache
+	config    Config
+	Cache     *cache.Cache
 }
 
 func (s *EthService) InjectProcessor(p Processor) {
 	s.processor = p
-	s.cache = cache.NewCache(10) // todo make delay factor configurable
+}
+
+func (s *EthService) AddConfig(config Config) {
+	s.config = config
+	s.Cache = cache.NewCache(uint64(config.DelayFactor))
 }
 
 func (s *EthService) Name() string {
@@ -58,13 +63,13 @@ func (s *EthService) Name() string {
 
 func (s *EthService) NewBlock(ctx context.Context, blockNumber uint64) {
 	Logger.Info().Msg(fmt.Sprintf("Received blockNumber: %d", blockNumber))
-	s.cache.Lock()
-	defer s.cache.Unlock()
-	for key, info := range s.cache.Data {
+	s.Cache.Lock()
+	defer s.Cache.Unlock()
+	for key, info := range s.Cache.Data {
 		if info.SendingBlock == blockNumber { // todo reorg issue? <=
 			if info.Tx == nil {
 				fmt.Printf("Info is null. Deleting entry.")
-				delete(s.cache.Data, key)
+				delete(s.Cache.Data, key)
 			} else {
 				fmt.Printf("Sending transaction %s to the sequencer from block listener\n", info.Tx.Hash().Hex())
 				transaction, err := s.SendRawTransaction(ctx, info.Tx.Hash().Hex())
@@ -73,8 +78,8 @@ func (s *EthService) NewBlock(ctx context.Context, blockNumber uint64) {
 					continue
 				}
 				Logger.Info().Msg("Transaction sent: " + transaction.String())
-				info.SendingBlock = blockNumber + s.cache.DelayFactor
-				s.cache.Data[key] = info
+				info.SendingBlock = blockNumber + s.Cache.DelayFactor
+				s.Cache.Data[key] = info
 			}
 		}
 	}
@@ -90,6 +95,7 @@ func (service *EthService) SendTransaction(ctx context.Context, tx *txtypes.Tran
 }
 
 func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*common.Hash, error) {
+
 	blockNumber, err := service.processor.Client.BlockNumber(ctx)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
@@ -108,11 +114,19 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	txFromAddress, err := SenderAddress(tx, tx.ChainId())
 
 	if IsCancellationTransaction(tx, txFromAddress) {
-		log.Println("Detected cancellation transaction, sending it right away...")
-		requests.SendCancelTx(service.processor.Client, service.processor.SigningKey)
+		Logger.Info().Msg("Detected cancellation transaction, sending it right away...")
+
+		backendClient, err := rpc.Dial(service.config.BackendURL.String())
+		if err != nil {
+			Logger.Err(err).Msg("Failed to connect to the Ethereum client")
+		}
+
+		txHash := requests.SendTx(backendClient, s)
+		Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
+		return &txHash, nil
 	}
 
-	if !service.cache.UpdateEntry(tx, blockNumber) {
+	if !service.Cache.UpdateEntry(tx, blockNumber) {
 		Logger.Info().Hex("Tx hash", txHash.Bytes()).Msg("Transaction delayed")
 		return &txHash, nil
 	}
@@ -194,7 +208,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
 
-	service.cache.ResetEntry(submitTx.Nonce(), blockNumber)
+	service.Cache.ResetEntry(submitTx.Nonce(), blockNumber)
 
 	return &txHash, nil
 }

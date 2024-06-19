@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"github.com/rs/zerolog/log"
-	"github.com/shutter-network/encrypting-rpc-server/config"
 	"github.com/shutter-network/encrypting-rpc-server/requests"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
@@ -30,10 +29,12 @@ var Config struct {
 	SigningKey                  string `mapstructure:"signing-key"`
 	KeyperSetChangeLookAhead    int    `mapstructure:"keyper-set-change-look-ahead"`
 	RPCUrl                      string `mapstructure:"rpc-url"`
+	WebsocketURL                string `mapstructure:"websocket-url"`
 	HTTPListenAddress           string `mapstructure:"http-listen-address"`
 	KeyBroadcastContractAddress string `mapstructure:"key-broadcast-contract-address"`
 	SequencerAddress            string `mapstructure:"sequencer-address"`
 	KeyperSetManagerAddress     string `mapstructure:"keyperset-manager-address"`
+	DelayFactor                 int    `mapstructure:"delay-factor"`
 }
 
 func Cmd() *cobra.Command {
@@ -78,6 +79,14 @@ func Cmd() *cobra.Command {
 	)
 
 	cmd.PersistentFlags().StringVarP(
+		&Config.WebsocketURL,
+		"websocket-url",
+		"",
+		"",
+		"address to forward requests to",
+	)
+
+	cmd.PersistentFlags().StringVarP(
 		&Config.KeyBroadcastContractAddress,
 		"key-broadcast-contract-address",
 		"",
@@ -101,10 +110,20 @@ func Cmd() *cobra.Command {
 		"keyper set manager contract address",
 	)
 
+	cmd.PersistentFlags().IntVarP(
+		&Config.DelayFactor,
+		"delay-factor",
+		"",
+		10,
+		"Server cache delay factor",
+	)
+
 	return cmd
 }
 
 func Start() error {
+	go requests.FetchNewBlocks(Config.WebsocketURL)
+
 	signingKey, err := crypto.HexToECDSA(Config.SigningKey)
 	if err != nil {
 		server.Logger.Fatal().Err(err).Msg("failed to parse signing key")
@@ -168,12 +187,12 @@ func Start() error {
 		server.Logger.Fatal().Err(err).Msg("failed to parse RPCUrl")
 	}
 
-	config := server.Config{
+	config := rpc.Config{
 		BackendURL:        backendURL,
 		HTTPListenAddress: Config.HTTPListenAddress,
 	}
 
-	service := server.NewRPCService(processor, &config)
+	service := server.NewRPCService(processor, config)
 	server.Logger.Info().Str("listen-on", Config.HTTPListenAddress).Msg("Serving JSON-RPC")
 
 	func() {
@@ -187,16 +206,12 @@ func Start() error {
 }
 
 func main() {
-	cfg, err := config.LoadConfig(".")
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to load config")
-	}
-	go requests.FetchNewBlocks(cfg.WebSocketURL)
-
 	status := 0
+
 	if err := Cmd().Execute(); err != nil {
 		server.Logger.Info().Err(err).Msg("failed running server")
 		status = 1
 	}
+
 	os.Exit(status)
 }

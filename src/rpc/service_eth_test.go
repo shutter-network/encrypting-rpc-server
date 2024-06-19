@@ -32,14 +32,14 @@ func TestSimple(t *testing.T) {
 
 	When(m.SendRawTransaction(AnyContext(), AnyString())).ThenReturn(&returnedHash)
 
-	m.cache.Data["key1"] = cache.TransactionInfo{
+	m.Cache.Data["key1"] = cache.TransactionInfo{
 		SendingBlock: blockNumber,
 		Tx:           tx,
 	}
 
 	m.NewBlock(ctx, blockNumber)
 
-	fmt.Print(m.cache.Data["key1"])
+	fmt.Print(m.Cache.Data["key1"])
 
 	//Verify(m, AtLeastOnce()).SendRawTransaction(ctx, tx.Hash().Hex())
 }
@@ -71,7 +71,7 @@ func TestNewBlock(t *testing.T) {
 
 	mockService := new(MockEthService)
 
-	mockService.EthService.cache = &cache.Cache{
+	mockService.EthService.Cache = &cache.Cache{
 		Data: map[string]cache.TransactionInfo{
 			"key1": {
 				SendingBlock: blockNumber,

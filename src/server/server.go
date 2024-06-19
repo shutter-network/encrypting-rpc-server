@@ -17,7 +17,6 @@ import (
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley"
-	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 )
 
@@ -76,17 +75,12 @@ func generateRequestID() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
-type Config struct {
-	BackendURL        *url.URL
-	HTTPListenAddress string
-}
-
 type server struct {
 	processor rpc.Processor
-	config    *Config
+	config    rpc.Config
 }
 
-func NewRPCService(processor rpc.Processor, config *Config) medleyService.Service {
+func NewRPCService(processor rpc.Processor, config rpc.Config) medleyService.Service {
 	return &server{
 		processor: processor,
 		config:    config,
@@ -101,6 +95,7 @@ func (srv *server) rpcHandler() (http.Handler, error) {
 	rpcServer := ethrpc.NewServer()
 	for _, service := range rpcServices {
 		service.InjectProcessor(srv.processor)
+		service.AddConfig(srv.config)
 		err := rpcServer.RegisterName(service.Name(), service)
 		if err != nil {
 			return nil, errors.Wrap(err, "error while trying to register RPCService")

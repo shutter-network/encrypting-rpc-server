@@ -224,11 +224,11 @@ func SetupServer(ctx context.Context, t *testing.T) error {
 		log.Info().Msg("can not unmarshal rpcurl")
 		return err
 	}
-	config := server.Config{
+	config := rpc.Config{
 		BackendURL:        backendUrl,
 		HTTPListenAddress: processor.URL,
 	}
-	service := server.NewRPCService(processor, &config)
+	service := server.NewRPCService(processor, config)
 	go func() {
 		err := medleyService.Run(ctx, service)
 		if err != nil {
