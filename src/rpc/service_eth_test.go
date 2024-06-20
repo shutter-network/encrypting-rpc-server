@@ -1,97 +1,78 @@
-package rpc
+package rpc_test
 
 import (
 	"context"
-	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	txtypes "github.com/ethereum/go-ethereum/core/types"
-	. "github.com/ovechkin-dm/mockio/mock"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/shutter-network/encrypting-rpc-server/cache"
+	"github.com/shutter-network/encrypting-rpc-server/rpc"
+	test_data "github.com/shutter-network/encrypting-rpc-server/test-data"
+	"github.com/shutter-network/encrypting-rpc-server/utils"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"math/big"
 	"testing"
 )
 
-// test 1 with Mockio
-func TestSimple(t *testing.T) {
-	SetUp(t)
-	m := Mock[EthService]()
-	ctx := context.Background()
-	blockNumber := uint64(100)
-	someAddress := common.HexToAddress("0xC0058BdcC93EaA1afd468f06A26394E2d80c8f01")
+// First transaction gets sent and cache gets updated
+func TestSendRawTransaction_Success(t *testing.T) {
+	mockClient := new(MockEthereumClient)
+	mockKeyperSetManager := new(MockKeyperSetManagerContract)
+	mockKeyBroadcast := new(MockKeyBroadcastContract)
+	mockSequencer := new(MockSequencerContract)
 
-	tx1 := &txtypes.LegacyTx{
-		Nonce:    0,
-		To:       &someAddress,
-		Value:    big.NewInt(100),
-		Gas:      100000,
-		GasPrice: big.NewInt(1),
-	}
-	tx := txtypes.NewTx(tx1)
-	returnedHash := common.HexToHash("0x37a7aee34d94dbbc890b402bf49997495ef12ea5a400b7441ba946fc5e42be7b")
-
-	When(m.SendRawTransaction(AnyContext(), AnyString())).ThenReturn(&returnedHash)
-
-	m.Cache.Data["key1"] = cache.TransactionInfo{
-		SendingBlock: blockNumber,
-		Tx:           tx,
+	privateKey, fromAddress, err := test_data.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("Failed to generate key pair: %v", err)
 	}
 
-	m.NewBlock(ctx, blockNumber)
+	config := test_data.MockConfig()
 
-	fmt.Print(m.Cache.Data["key1"])
-
-	//Verify(m, AtLeastOnce()).SendRawTransaction(ctx, tx.Hash().Hex())
-}
-
-// test 2 with testify
-type MockEthService struct {
-	mock.Mock
-	EthService
-}
-
-func (m *MockEthService) SendRawTransaction(ctx context.Context, txHash string) (*common.Hash, error) {
-	args := m.Called(ctx, txHash)
-	return args.Get(0).(*common.Hash), args.Error(1)
-}
-
-func TestNewBlock(t *testing.T) {
-	ctx := context.Background()
-	blockNumber := uint64(100)
-	someAddress := common.HexToAddress("0xC0058BdcC93EaA1afd468f06A26394E2d80c8f01")
-
-	tx1 := &txtypes.LegacyTx{
-		Nonce:    0,
-		To:       &someAddress,
-		Value:    big.NewInt(100),
-		Gas:      100000,
-		GasPrice: big.NewInt(1),
-	}
-	tx := txtypes.NewTx(tx1)
-
-	mockService := new(MockEthService)
-
-	mockService.EthService.Cache = &cache.Cache{
-		Data: map[string]cache.TransactionInfo{
-			"key1": {
-				SendingBlock: blockNumber,
-				Tx:           tx,
-			},
-			"key2": {
-				SendingBlock: blockNumber,
-				Tx:           nil,
-			},
+	service := &rpc.EthService{
+		Processor: rpc.Processor{
+			Client:                   mockClient,
+			SigningKey:               privateKey,
+			SigningAddress:           &fromAddress,
+			KeyBroadcastContract:     mockKeyBroadcast,
+			SequencerContract:        mockSequencer,
+			KeyperSetManagerContract: mockKeyperSetManager,
 		},
-		DelayFactor: 10,
+		Cache:              cache.NewCache(10),
+		Config:             config,
+		ProcessTransaction: mockProcessTransaction,
 	}
 
-	returnedHash := common.HexToHash("0x37a7aee34d94dbbc890b402bf49997495ef12ea5a400b7441ba946fc5e42be7b")
+	nonce := uint64(1)
+	gasPrice := big.NewInt(2000000000)
+	chainID := big.NewInt(1)
+	blockNumber := uint64(1)
+	accountBalance := big.NewInt(1000000000000000000)
 
-	mockService.On("SendRawTransaction", ctx, tx.Hash().Hex()).Return(&returnedHash, nil)
+	mockClient.On("PendingNonceAt", mock.Anything, fromAddress).Return(nonce, nil)
+	mockClient.On("SuggestGasPrice", mock.Anything).Return(gasPrice, nil)
+	mockClient.On("ChainID", mock.Anything).Return(chainID, nil)
+	mockClient.On("BlockNumber", mock.Anything).Return(blockNumber, nil)
+	mockClient.On("NonceAt", mock.Anything, fromAddress, (*big.Int)(nil)).Return(nonce, nil)
+	mockClient.On("BalanceAt", mock.Anything, fromAddress, (*big.Int)(nil)).Return(accountBalance, nil)
 
-	mockService.NewBlock(ctx, blockNumber)
+	rawTx1, signedTx, err := test_data.Tx(privateKey, nonce, chainID)
+	if err != nil {
+		t.Fatalf("Failed to create signed transaction: %v", err)
+	}
 
-	mockService.AssertExpectations(t)
-	//require.NotContains(t, mockService.cache.Data, "key2", "Expected key2 to be deleted from cache")
-	//require.Equal(t, blockNumber+mockService.cache.DelayFactor, mockService.cache.Data["key1"].SendingBlock, "Expected SendingBlock to be updated")
+	receipt := &types.Receipt{
+		Status: types.ReceiptStatusSuccessful,
+		TxHash: signedTx.Hash(),
+	}
+
+	mockClient.On("WaitMined", mock.Anything, mock.Anything).Return(receipt, nil)
+	mockClient.On("TransactionReceipt", mock.Anything, mock.Anything).Return(receipt, nil)
+
+	// Send the transaction
+	txHash, err := service.SendRawTransaction(context.Background(), rawTx1)
+	utils.CheckErr(t, err, "Failed to send raw transaction 1")
+
+	assert.NotNil(t, txHash)
+	assert.Equal(t, signedTx.Hash().Hex(), txHash.Hex())
+
+	// todo check cache
 }

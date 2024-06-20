@@ -1,4 +1,4 @@
-package rpc
+package utils
 
 import (
 	"crypto/ecdsa"
@@ -100,7 +100,7 @@ func TestSenderAddress_LegacyTx(t *testing.T) {
 		t.Fatalf("Failed to sign transaction: %v", err)
 	}
 
-	sender, err := SenderAddress(signedLegacyTx, chainID)
+	sender, err := SenderAddress(signedLegacyTx)
 	if err != nil {
 		t.Errorf("Error occurred: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestSenderAddress_AccessListTx(t *testing.T) {
 		t.Fatalf("Failed to sign transaction: %v", err)
 	}
 
-	sender, err := SenderAddress(signedAccessListTx, chainID)
+	sender, err := SenderAddress(signedAccessListTx)
 	if err != nil {
 		t.Errorf("Error occurred: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestSenderAddress_DynamicFeeTx(t *testing.T) {
 		t.Fatalf("Failed to sign transaction: %v", err)
 	}
 
-	sender, err := SenderAddress(signedDynamicFeeTx, chainID)
+	sender, err := SenderAddress(signedDynamicFeeTx)
 	if err != nil {
 		t.Errorf("Error occurred: %v", err)
 	}
