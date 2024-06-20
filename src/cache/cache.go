@@ -2,8 +2,8 @@ package cache
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"sync"
 )
 
@@ -25,19 +25,33 @@ func NewCache(delayFactor uint64) *Cache {
 	}
 }
 
-func (c *Cache) Key(address common.Address, nonce uint64) string {
-	return fmt.Sprintf("%s-%d", address.Hex(), nonce)
+func (c *Cache) Key(tx *types.Transaction) (string, error) {
+	fromAddress, err := utils.SenderAddress(tx)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%s-%d", fromAddress.Hex(), tx.Nonce()), nil
 }
 
-func (c *Cache) ResetEntry(nonce uint64, currentBlock uint64) {
+func (c *Cache) ResetEntry(tx *types.Transaction, currentBlock uint64) (bool, error) {
 	c.Lock()
 	defer c.Unlock()
-	key := c.Key(common.Address{}, nonce)
+	key, err := c.Key(tx)
+	if err != nil {
+		return false, err
+	}
+
 	c.Data[key] = TransactionInfo{Tx: nil, SendingBlock: currentBlock}
+	return true, nil
 }
 
-func (c *Cache) UpdateEntry(newTx *types.Transaction, currentBlock uint64) bool {
-	key := c.Key(*newTx.To(), newTx.Nonce())
+func (c *Cache) UpdateEntry(newTx *types.Transaction, currentBlock uint64) (bool, error) {
+	key, err := c.Key(newTx)
+	if err != nil {
+		return false, err
+	}
+
 	c.Lock()
 	defer c.Unlock()
 
@@ -46,20 +60,26 @@ func (c *Cache) UpdateEntry(newTx *types.Transaction, currentBlock uint64) bool 
 			fmt.Printf("A transaction already exists with a higher gas price. Delaying transaction sending.")
 			existing.SendingBlock = currentBlock
 			c.Data[key] = existing
-			return false
+			return false, nil
 		}
 	}
 
 	fmt.Printf("Adding transaction to the cache.")
 	c.Data[key] = TransactionInfo{Tx: newTx, SendingBlock: currentBlock + c.DelayFactor}
 
-	return true
+	return true, nil
 }
 
-func (c *Cache) DeleteEntry(address common.Address, nonce uint64) {
-	key := c.Key(address, nonce)
+func (c *Cache) DeleteEntry(tx *types.Transaction) (bool, error) {
+	key, err := c.Key(tx)
+	if err != nil {
+		return false, err
+	}
+
 	c.Lock()
 	defer c.Unlock()
+
+	utils.Logger.Info().Msgf("Deleting entry at key %s", key)
 	delete(c.Data, key)
-	fmt.Printf("Cancelling transaction %s-%d\n", address.Hex(), nonce)
+	return true, nil
 }

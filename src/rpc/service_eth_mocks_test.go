@@ -6,6 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	"github.com/stretchr/testify/mock"
 	"math/big"
 )
@@ -29,6 +30,15 @@ type MockKeyBroadcastContract struct {
 // Mock for SequencerContract
 type MockSequencerContract struct {
 	mock.Mock
+}
+
+func MockConfig() rpc.Config {
+	return rpc.Config{
+		BackendURL:        &url.URL{},
+		WebsocketURL:      &url.URL{},
+		HTTPListenAddress: ":8546",
+		DelayFactor:       10,
+	}
 }
 
 func mockProcessTransaction(tx *types.Transaction, ctx context.Context, service *rpc.EthService, blockNumber uint64, b []byte) (*types.Transaction, error) {

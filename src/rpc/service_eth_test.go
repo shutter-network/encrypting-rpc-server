@@ -25,7 +25,7 @@ func TestSendRawTransaction_Success(t *testing.T) {
 		t.Fatalf("Failed to generate key pair: %v", err)
 	}
 
-	config := test_data.MockConfig()
+	config := MockConfig()
 
 	service := &rpc.EthService{
 		Processor: rpc.Processor{

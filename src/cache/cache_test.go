@@ -1,39 +1,55 @@
 package cache
 
 import (
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
+	"fmt"
 	"math/big"
 	"testing"
+
+	test_data "github.com/shutter-network/encrypting-rpc-server/test-data"
+	"github.com/stretchr/testify/assert"
 )
 
 // todo update to cover all cases
 
-func TestCache(t *testing.T) {
+func TestCache_Key(t *testing.T) {
+	privateKey, fromAddress, err := test_data.GenerateKeyPair()
+	assert.NoError(t, err, "Failed to generate key pair")
+
+	chainID := big.NewInt(1)
+	nonce := uint64(1)
+	_, signedTx, err := test_data.Tx(privateKey, nonce, chainID)
+	assert.NoError(t, err, "Failed to create signed transaction")
+
 	c := NewCache(10)
-	toAddress := common.HexToAddress("0x123")
-	txData := &types.LegacyTx{
-		Nonce:    0,
-		To:       &toAddress,
-		Value:    big.NewInt(0),
-		Gas:      21000,
-		GasPrice: big.NewInt(1),
-	}
-	tx := types.NewTx(txData)
 
-	updated := c.UpdateEntry(tx, 100)
-	if !updated {
-		t.Error("Expected transaction to be added to cache")
-	}
+	key, err := c.Key(signedTx)
+	assert.NoError(t, err, "Failed to get key from transaction")
 
-	c.ResetEntry(tx.Nonce(), 110)
-	entry := c.Data[c.Key(common.Address{}, tx.Nonce())]
-	if entry.Tx != nil || entry.SendingBlock != 110 {
-		t.Error("Expected entry to be reset with nil transaction and new sending block")
-	}
+	expectedKey := fmt.Sprintf("%s-%d", fromAddress.Hex(), nonce)
+	assert.Equal(t, expectedKey, key, "Expected key does not match")
+}
 
-	c.DeleteEntry(toAddress, tx.Nonce())
-	if _, exists := c.Data[c.Key(toAddress, tx.Nonce())]; exists {
-		t.Error("Expected entry to be deleted from cache")
-	}
+func TestCache_UpdateEntry(t *testing.T) {
+	c := NewCache(10)
+
+	privateKey, fromAddress, err := test_data.GenerateKeyPair()
+	assert.NoError(t, err, "Failed to generate key pair")
+
+	_, signedTx, err := test_data.Tx(privateKey, 1, big.NewInt(1))
+	assert.NoError(t, err, "Failed to create signed transaction")
+
+	updated, err := c.UpdateEntry(signedTx, 100)
+	assert.NoError(t, err, "Failed to update entry")
+	assert.True(t, updated, "Expected transaction to be added to cache")
+
+	key, err := c.Key(signedTx)
+	assert.NoError(t, err, "Failed to get key from cache")
+
+	expectedKey := fmt.Sprintf("%s-%d", fromAddress.Hex(), signedTx.Nonce())
+	assert.Equal(t, expectedKey, key, "Expected key does not match")
+
+	// Verify that the transaction in the cache matches the signed transaction
+	cachedTxInfo, exists := c.Data[key]
+	assert.True(t, exists, "Expected transaction to be in the cache")
+	assert.Equal(t, signedTx.Hash(), cachedTxInfo.Tx.Hash(), "Expected cached transaction hash does not match")
 }

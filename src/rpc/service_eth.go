@@ -131,9 +131,13 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return &txHash, nil
 	}
 
-	// todo failure to update cache
+	updated, err := service.Cache.UpdateEntry(tx, blockNumber)
+	if err != nil {
+		utils.Logger.Err(err).Msg("Failed to update the cache.")
+		return nil, &EncodingError{StatusCode: -32602, Err: err} // todo check if necessary
+	}
 
-	if !service.Cache.UpdateEntry(tx, blockNumber) {
+	if !updated {
 		utils.Logger.Info().Hex("Tx hash", txHash.Bytes()).Msg("Transaction delayed")
 		return &txHash, nil
 	}
@@ -149,7 +153,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
 
-	service.Cache.ResetEntry(tx.Nonce(), blockNumber)
+	service.Cache.ResetEntry(tx, blockNumber)
 
 	return &txHash, nil
 }

@@ -5,8 +5,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/shutter-network/encrypting-rpc-server/rpc"
-	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	"math/big"
 )
 
@@ -22,15 +20,6 @@ func GenerateKeyPair() (*ecdsa.PrivateKey, common.Address, error) {
 	}
 	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 	return privateKey, fromAddress, nil
-}
-
-func MockConfig() rpc.Config {
-	return rpc.Config{
-		BackendURL:        &url.URL{},
-		WebsocketURL:      &url.URL{},
-		HTTPListenAddress: ":8546",
-		DelayFactor:       10,
-	}
 }
 
 func Tx(privateKey *ecdsa.PrivateKey, nonce uint64, chainID *big.Int) (string, *types.Transaction, error) {
