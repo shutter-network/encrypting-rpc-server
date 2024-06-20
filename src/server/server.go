@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"io"
 	"net/http"
 	"time"
@@ -60,9 +61,9 @@ func (p *JSONRPCProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	selectedHandler := p.SelectHandler(rpcreq.Method)
 
 	if selectedHandler == p.processor {
-		Logger.Info().Str("requestID", requestID).Str("method", rpcreq.Method).Msg("dispatching to processor")
+		utils.Logger.Info().Str("requestID", requestID).Str("method", rpcreq.Method).Msg("dispatching to processor")
 	} else {
-		Logger.Info().Str("requestID", requestID).Str("method", rpcreq.Method).Msg("dispatching to backend")
+		utils.Logger.Info().Str("requestID", requestID).Str("method", rpcreq.Method).Msg("dispatching to backend")
 	}
 
 	// make the body available again before letting reverse proxy handle the rest
@@ -71,7 +72,7 @@ func (p *JSONRPCProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func generateRequestID() string {
-	Logger.Info().Msg("generating request ID")
+	utils.Logger.Info().Msg("generating request ID")
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 

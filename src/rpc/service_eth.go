@@ -60,7 +60,7 @@ func (s *EthService) Name() string {
 }
 
 func (s *EthService) NewBlock(ctx context.Context, blockNumber uint64) {
-	Logger.Info().Msg(fmt.Sprintf("Received blockNumber: %d", blockNumber))
+	utils.Logger.Info().Msg(fmt.Sprintf("Received blockNumber: %d", blockNumber))
 	s.Cache.Lock()
 	defer s.Cache.Unlock()
 	for key, info := range s.Cache.Data {
@@ -72,10 +72,10 @@ func (s *EthService) NewBlock(ctx context.Context, blockNumber uint64) {
 				fmt.Printf("Sending transaction %s to the sequencer from block listener\n", info.Tx.Hash().Hex())
 				txHash, err := s.SendRawTransaction(ctx, info.Tx.Hash().Hex())
 				if err != nil {
-					Logger.Error().Err(err).Msg("Failed to send transaction")
+					utils.Logger.Error().Err(err).Msg("Failed to send transaction")
 					continue
 				}
-				Logger.Info().Msg("Transaction sent: " + txHash.Hex())
+				utils.Logger.Info().Msg("Transaction sent: " + txHash.Hex())
 				info.SendingBlock = blockNumber + s.Cache.DelayFactor
 				s.Cache.Data[key] = info
 			}
@@ -119,22 +119,22 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	txFromAddress, err := utils.SenderAddress(tx)
 
 	if utils.IsCancellationTransaction(tx, txFromAddress) {
-		Logger.Info().Msg("Detected cancellation transaction, sending it right away...")
+		utils.Logger.Info().Msg("Detected cancellation transaction, sending it right away...")
 
 		backendClient, err := rpc.Dial(service.Config.BackendURL.String())
 		if err != nil {
-			Logger.Err(err).Msg("Failed to connect to the Ethereum client")
+			utils.Logger.Err(err).Msg("Failed to connect to the Ethereum client")
 		}
 
 		txHash := requests.SendTx(backendClient, s)
-		Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
+		utils.Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
 		return &txHash, nil
 	}
 
 	// todo failure to update cache
 
 	if !service.Cache.UpdateEntry(tx, blockNumber) {
-		Logger.Info().Hex("Tx hash", txHash.Bytes()).Msg("Transaction delayed")
+		utils.Logger.Info().Hex("Tx hash", txHash.Bytes()).Msg("Transaction delayed")
 		return &txHash, nil
 	}
 
@@ -142,7 +142,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
-	Logger.Info().Hex("Incoming tx hash", txHash.Bytes()).Hex("Encrypted tx hash", submitTx.Hash().Bytes()).Msg("Transaction sent")
+	utils.Logger.Info().Hex("Incoming tx hash", txHash.Bytes()).Hex("Encrypted tx hash", submitTx.Hash().Bytes()).Msg("Transaction sent")
 
 	_, err = bind.WaitMined(ctx, service.Processor.Client, submitTx)
 	if err != nil {

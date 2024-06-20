@@ -5,12 +5,25 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/joho/godotenv"
+	"github.com/rs/zerolog"
 	"log"
 	"math/big"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 )
+
+func setUpLogger() zerolog.Logger {
+	logger := zerolog.New(os.Stdout).
+		Level(zerolog.TraceLevel).
+		With().
+		Timestamp().
+		Logger()
+	return logger
+}
+
+var Logger = setUpLogger()
 
 func LoadEnv() {
 	_, b, _, _ := runtime.Caller(0)
