@@ -8,7 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
-	"github.com/shutter-network/shutter/shlib/shcrypto"
 	"math/big"
 )
 
@@ -60,7 +59,7 @@ type KeyBroadcastContract interface {
 }
 
 type SequencerContract interface {
-	SubmitEncryptedTransaction(opts *bind.TransactOpts, eon uint64, identityPrefix shcrypto.Block, encryptedTx []byte, gasLimit *big.Int) (*types.Transaction, error)
+	SubmitEncryptedTransaction(opts *bind.TransactOpts, eon uint64, identityPrefix [32]byte, encryptedTx []byte, gasLimit *big.Int) (*types.Transaction, error)
 }
 
 // EthClientWrapper

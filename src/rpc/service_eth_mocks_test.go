@@ -6,7 +6,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
-	"github.com/shutter-network/shutter/shlib/shcrypto"
 	"github.com/stretchr/testify/mock"
 	"math/big"
 )
@@ -98,7 +97,7 @@ func (m *MockKeyBroadcastContract) GetEonKey(opts *bind.CallOpts, eon uint64) ([
 	return args.Get(0).([]byte), args.Error(1)
 }
 
-func (m *MockSequencerContract) SubmitEncryptedTransaction(opts *bind.TransactOpts, eon uint64, identityPrefix shcrypto.Block, encryptedTx []byte, gasLimit *big.Int) (*types.Transaction, error) {
+func (m *MockSequencerContract) SubmitEncryptedTransaction(opts *bind.TransactOpts, eon uint64, identityPrefix [32]byte, encryptedTx []byte, gasLimit *big.Int) (*types.Transaction, error) {
 	args := m.Called(opts, eon, identityPrefix, encryptedTx, gasLimit)
 	return args.Get(0).(*types.Transaction), args.Error(1)
 }
