@@ -39,6 +39,7 @@ func TestSendRawTransaction_Success(t *testing.T) {
 		Cache:              cache.NewCache(10),
 		Config:             config,
 		ProcessTransaction: mockProcessTransaction,
+		WaitMinedFunc:      mockWaitMined,
 	}
 
 	nonce := uint64(1)
@@ -64,7 +65,6 @@ func TestSendRawTransaction_Success(t *testing.T) {
 		TxHash: signedTx.Hash(),
 	}
 
-	mockClient.On("WaitMined", mock.Anything, mock.Anything).Return(receipt, nil)
 	mockClient.On("TransactionReceipt", mock.Anything, mock.Anything).Return(receipt, nil)
 
 	// Send the transaction

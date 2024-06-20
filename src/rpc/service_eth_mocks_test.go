@@ -8,27 +8,27 @@ import (
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 	"github.com/stretchr/testify/mock"
-	"io"
 	"math/big"
 )
+
+// MOCKS
 
 type MockEthereumClient struct {
 	mock.Mock
 }
 
+// Mock for KeyperSetManagerContract
 type MockKeyperSetManagerContract struct {
 	mock.Mock
 }
 
+// Mock for KeyBroadcastContract
 type MockKeyBroadcastContract struct {
 	mock.Mock
 }
 
+// Mock for SequencerContract
 type MockSequencerContract struct {
-	mock.Mock
-}
-
-type MockEonPublicKey struct {
 	mock.Mock
 }
 
@@ -36,6 +36,13 @@ func mockProcessTransaction(tx *types.Transaction, ctx context.Context, service 
 	return tx, nil
 }
 
+func mockWaitMined(ctx context.Context, client bind.DeployBackend, tx *types.Transaction) (*types.Receipt, error) {
+	receipt := &types.Receipt{
+		Status: types.ReceiptStatusSuccessful,
+		TxHash: tx.Hash(),
+	}
+	return receipt, nil
+}
 func (m *MockEthereumClient) PendingNonceAt(ctx context.Context, account common.Address) (uint64, error) {
 	args := m.Called(ctx, account)
 	return args.Get(0).(uint64), args.Error(1)
@@ -59,11 +66,6 @@ func (m *MockEthereumClient) BlockNumber(ctx context.Context) (uint64, error) {
 func (m *MockEthereumClient) SendTransaction(ctx context.Context, tx *types.Transaction) error {
 	args := m.Called(ctx, tx)
 	return args.Error(0)
-}
-
-func (m *MockEthereumClient) WaitMined(ctx context.Context, tx *types.Transaction) (*types.Receipt, error) {
-	args := m.Called(ctx, tx)
-	return args.Get(0).(*types.Receipt), args.Error(1)
 }
 
 func (m *MockEthereumClient) TransactionReceipt(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
@@ -99,19 +101,4 @@ func (m *MockKeyBroadcastContract) GetEonKey(opts *bind.CallOpts, eon uint64) ([
 func (m *MockSequencerContract) SubmitEncryptedTransaction(opts *bind.TransactOpts, eon uint64, identityPrefix shcrypto.Block, encryptedTx []byte, gasLimit *big.Int) (*types.Transaction, error) {
 	args := m.Called(opts, eon, identityPrefix, encryptedTx, gasLimit)
 	return args.Get(0).(*types.Transaction), args.Error(1)
-}
-
-func (m *MockEonPublicKey) Unmarshal(data []byte) error {
-	args := m.Called(data)
-	return args.Error(0)
-}
-
-func (m *MockEonPublicKey) RandomSigma(rng io.Reader) ([]byte, error) {
-	args := m.Called(rng)
-	return args.Get(0).([]byte), args.Error(1)
-}
-
-func (m *MockEonPublicKey) Encrypt(data, key, identity, sigma []byte) []byte {
-	args := m.Called(data, key, identity, sigma)
-	return args.Get(0).([]byte)
 }

@@ -43,6 +43,7 @@ type EthService struct {
 	Config             Config
 	Cache              *cache.Cache
 	ProcessTransaction func(tx *txtypes.Transaction, ctx context.Context, service *EthService, blockNumber uint64, b []byte) (*txtypes.Transaction, error)
+	WaitMinedFunc      func(ctx context.Context, backend bind.DeployBackend, tx *txtypes.Transaction) (*txtypes.Receipt, error)
 }
 
 func (s *EthService) InjectProcessor(p Processor) {
@@ -96,6 +97,10 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		service.ProcessTransaction = DefaultProcessTransaction
 	}
 
+	if service.WaitMinedFunc == nil {
+		service.WaitMinedFunc = DefaultWaitMined
+	}
+
 	blockNumber, err := service.Processor.Client.BlockNumber(ctx)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
@@ -147,6 +152,14 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	service.Cache.ResetEntry(tx.Nonce(), blockNumber)
 
 	return &txHash, nil
+}
+
+var DefaultWaitMined = func(ctx context.Context, backend bind.DeployBackend, tx *txtypes.Transaction) (*txtypes.Receipt, error) {
+	mined, err := bind.WaitMined(ctx, backend, tx)
+	if err != nil {
+		return nil, err
+	}
+	return mined, nil
 }
 
 var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Context, service *EthService, blockNumber uint64, b []byte) (*txtypes.Transaction, error) {

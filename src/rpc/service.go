@@ -45,7 +45,6 @@ type EthereumClient interface {
 	ChainID(ctx context.Context) (*big.Int, error)
 	BlockNumber(ctx context.Context) (uint64, error)
 	SendTransaction(ctx context.Context, tx *types.Transaction) error
-	WaitMined(ctx context.Context, tx *types.Transaction) (*types.Receipt, error)
 	TransactionReceipt(ctx context.Context, txHash common.Hash) (*types.Receipt, error)
 	CodeAt(ctx context.Context, account common.Address, blockNumber *big.Int) ([]byte, error)
 	NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error)
@@ -87,10 +86,6 @@ func (w *EthClientWrapper) BlockNumber(ctx context.Context) (uint64, error) {
 
 func (w *EthClientWrapper) SendTransaction(ctx context.Context, tx *types.Transaction) error {
 	return w.Client.SendTransaction(ctx, tx)
-}
-
-func (w *EthClientWrapper) WaitMined(ctx context.Context, tx *types.Transaction) (*types.Receipt, error) {
-	return bind.WaitMined(ctx, w.Client, tx)
 }
 
 func (w *EthClientWrapper) TransactionReceipt(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
