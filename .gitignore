@@ -24,3 +24,16 @@ src/bin/
 
 # docker compose
 docker/.env
+
+# macOS
+.DS_Store
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+
+#env
+.env
+

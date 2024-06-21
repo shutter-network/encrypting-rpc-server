@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"io"
 	"net/http"
 	"time"
@@ -16,7 +18,6 @@ import (
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley"
-	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 )
 
@@ -28,6 +29,8 @@ type JSONRPCProxy struct {
 func (p *JSONRPCProxy) SelectHandler(method string) http.Handler {
 	// route the eth_namespace to the l2-backend
 	switch method {
+	case "eth_newBlock":
+		return p.processor
 	case "eth_sendTransaction":
 		return p.processor
 	case "eth_sendRawTransaction":
@@ -39,21 +42,28 @@ func (p *JSONRPCProxy) SelectHandler(method string) http.Handler {
 
 func (p *JSONRPCProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
+
 	if err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
+
 	rpcreq := medley.RPCRequest{}
 	err = json.Unmarshal(body, &rpcreq)
 	if err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
+
+	// for debugging
+	requestID := generateRequestID()
+
 	selectedHandler := p.SelectHandler(rpcreq.Method)
+
 	if selectedHandler == p.processor {
-		Logger.Info().Str("method", rpcreq.Method).Msg("dispatching to processor")
+		utils.Logger.Info().Str("requestID", requestID).Str("method", rpcreq.Method).Msg("dispatching to processor")
 	} else {
-		Logger.Info().Str("method", rpcreq.Method).Msg("dispatching to backend")
+		utils.Logger.Info().Str("requestID", requestID).Str("method", rpcreq.Method).Msg("dispatching to backend")
 	}
 
 	// make the body available again before letting reverse proxy handle the rest
@@ -61,17 +71,17 @@ func (p *JSONRPCProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	selectedHandler.ServeHTTP(w, r)
 }
 
-type Config struct {
-	BackendURL        *url.URL
-	HTTPListenAddress string
+func generateRequestID() string {
+	utils.Logger.Info().Msg("generating request ID")
+	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
 type server struct {
 	processor rpc.Processor
-	config    *Config
+	config    rpc.Config
 }
 
-func NewRPCService(processor rpc.Processor, config *Config) medleyService.Service {
+func NewRPCService(processor rpc.Processor, config rpc.Config) medleyService.Service {
 	return &server{
 		processor: processor,
 		config:    config,
@@ -86,6 +96,7 @@ func (srv *server) rpcHandler() (http.Handler, error) {
 	rpcServer := ethrpc.NewServer()
 	for _, service := range rpcServices {
 		service.InjectProcessor(srv.processor)
+		service.AddConfig(srv.config)
 		err := rpcServer.RegisterName(service.Name(), service)
 		if err != nil {
 			return nil, errors.Wrap(err, "error while trying to register RPCService")
