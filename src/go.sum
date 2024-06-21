@@ -330,6 +330,8 @@ github.com/shutter-network/shop-contracts v0.0.0-20240407183559-9504b6278cef h1:
 github.com/shutter-network/shop-contracts v0.0.0-20240407183559-9504b6278cef/go.mod h1:LEWXLRruvxq9fe2oKtJI3xfzbauhfWTjOczHN61RU+4=
 github.com/shutter-network/shutter/shlib v0.1.19-0.20240520193152-f4f56ef19f9e h1:ApPJlt+gwY3s8XcoDEf3kTHpK1TWxAUubCRyyrtb01U=
 github.com/shutter-network/shutter/shlib v0.1.19-0.20240520193152-f4f56ef19f9e/go.mod h1:RlYNZjx+pfKAi0arH+jfdlxG4kQ75UFzDfVjgCVYaUw=
+github.com/shutter-network/shutter/shlib v0.1.19 h1:Fm/PnxAapl5UK4JuJyF2wBh3dYB5ESztnNFcbmzNNOI=
+github.com/shutter-network/shutter/shlib v0.1.19/go.mod h1:miY10OJ0FKjLZTwvmG0AJNijsjsNDAk6l1tROTj8uzU=
 github.com/spaolacci/murmur3 v1.1.0 h1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=
 github.com/spaolacci/murmur3 v1.1.0/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/spf13/afero v1.8.2 h1:xehSyVa0YnHWsJ49JFljMpg1HX19V6NDZ1fkm1Xznbo=
