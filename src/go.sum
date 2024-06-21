@@ -324,6 +324,8 @@ github.com/shirou/gopsutil v3.21.11+incompatible h1:+1+c1VGhc88SSonWP6foOcLhvnKl
 github.com/shirou/gopsutil v3.21.11+incompatible/go.mod h1:5b4v6he4MtMOwMlS0TUMTu2PcXUg8+E1lC7eC3UO/RA=
 github.com/shutter-network/gnosh-contracts v0.2.0 h1:qH3gAhlh5VZzvJcbi044lxFWQ+MAR9GevKKUirWxSlU=
 github.com/shutter-network/gnosh-contracts v0.2.0/go.mod h1:QB0d64ybbVFKMrLjrc1tldri87KNjTmKQjhk9jaso2E=
+github.com/shutter-network/gnosh-contracts v0.3.0 h1:Aj5PFMAG2tKQVBf6Fs2H45sJiNvHz0HjtdtCF3bZZb4=
+github.com/shutter-network/gnosh-contracts v0.3.0/go.mod h1:QB0d64ybbVFKMrLjrc1tldri87KNjTmKQjhk9jaso2E=
 github.com/shutter-network/rolling-shutter/rolling-shutter v0.0.7-0.20231114104306-f1b9a8f366b2 h1:kdfMK5bkGqnnNt+TNqsI1sag9XNvHzGtgBfs1TePqNA=
 github.com/shutter-network/rolling-shutter/rolling-shutter v0.0.7-0.20231114104306-f1b9a8f366b2/go.mod h1:QxJRcyOPZLEkrPX7q60m2/ODxAQCI7D4NzBh41YXcx8=
 github.com/shutter-network/shop-contracts v0.0.0-20240407183559-9504b6278cef h1:vIQD/6vR5t/A5Z/SVx2FGmaLnRMqCFR/rzIddcU3pFI=
