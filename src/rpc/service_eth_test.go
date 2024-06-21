@@ -74,5 +74,12 @@ func TestSendRawTransaction_Success(t *testing.T) {
 	assert.NotNil(t, txHash)
 	assert.Equal(t, signedTx.Hash().Hex(), txHash.Hex())
 
-	// todo check cache
+	// Check that the key is stored with the current block number
+	key, err := service.Cache.Key(signedTx)
+	assert.NoError(t, err, "Failed to get key from cache")
+
+	cachedTxInfo, exists := service.Cache.Data[key]
+	assert.True(t, exists, "Expected transaction information to be in the cache")
+	assert.Equal(t, blockNumber, cachedTxInfo.SendingBlock, "Expected sending block does not match")
+	assert.Nil(t, cachedTxInfo.Tx, "Expected transaction to be nil")
 }

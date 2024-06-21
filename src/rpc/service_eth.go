@@ -153,7 +153,10 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
 
-	service.Cache.ResetEntry(tx, blockNumber)
+	_, err = service.Cache.ResetEntry(tx, blockNumber)
+	if err != nil {
+		return nil, &EncodingError{StatusCode: -32602, Err: err}
+	}
 
 	return &txHash, nil
 }

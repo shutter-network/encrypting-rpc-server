@@ -11,23 +11,18 @@ import (
 	"math/big"
 )
 
-// MOCKS
-
 type MockEthereumClient struct {
 	mock.Mock
 }
 
-// Mock for KeyperSetManagerContract
 type MockKeyperSetManagerContract struct {
 	mock.Mock
 }
 
-// Mock for KeyBroadcastContract
 type MockKeyBroadcastContract struct {
 	mock.Mock
 }
 
-// Mock for SequencerContract
 type MockSequencerContract struct {
 	mock.Mock
 }

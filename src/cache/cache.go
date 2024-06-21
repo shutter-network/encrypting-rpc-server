@@ -55,16 +55,19 @@ func (c *Cache) UpdateEntry(newTx *types.Transaction, currentBlock uint64) (bool
 	c.Lock()
 	defer c.Unlock()
 
+	utils.Logger.Debug().Msgf("Attempting to update cache with key [%s] and transaction hash [%s]", key, newTx.Hash().Hex())
+
 	if existing, found := c.Data[key]; found {
 		if newTx.GasPrice().Cmp(existing.Tx.GasPrice()) <= 0 {
-			fmt.Printf("A transaction already exists with a higher gas price. Delaying transaction sending.")
+			utils.Logger.Debug().Msgf("A transaction already exists with a higher gas price. "+
+				"Delaying transaction sending to [%d].", currentBlock)
 			existing.SendingBlock = currentBlock
 			c.Data[key] = existing
 			return false, nil
 		}
 	}
 
-	fmt.Printf("Adding transaction to the cache.")
+	utils.Logger.Info().Msgf("Adding transaction with hash [%s] to the cache at key [%s]\n", newTx.Hash(), key)
 	c.Data[key] = TransactionInfo{Tx: newTx, SendingBlock: currentBlock + c.DelayFactor}
 
 	return true, nil
