@@ -61,21 +61,28 @@ func (s *EthService) Name() string {
 
 func (s *EthService) NewBlock(ctx context.Context, blockNumber uint64) {
 	utils.Logger.Info().Msg(fmt.Sprintf("Received blockNumber: %d", blockNumber))
-	s.Cache.Lock()
-	defer s.Cache.Unlock()
 	for key, info := range s.Cache.Data {
 		if info.SendingBlock == blockNumber { // todo reorg issue? <=
 			if info.Tx == nil {
-				fmt.Printf("Info is null. Deleting entry.")
+				utils.Logger.Debug().Msgf("Deleting entry at key [%s]", key)
 				delete(s.Cache.Data, key)
 			} else {
-				fmt.Printf("Sending transaction %s to the sequencer from block listener\n", info.Tx.Hash().Hex())
-				txHash, err := s.SendRawTransaction(ctx, info.Tx.Hash().Hex()) // todo change to signed tx
+				utils.Logger.Debug().Msgf("Sending transaction [%s] to the sequencer from block listener", info.Tx.Hash().Hex())
+				rawTxBytes, err := info.Tx.MarshalBinary()
+				if err != nil {
+					utils.Logger.Error().Err(err).Msg("Failed to marshal data")
+				}
+
+				rawTx := "0x" + common.Bytes2Hex(rawTxBytes)
+
+				txHash, err := s.SendRawTransaction(ctx, rawTx)
 				if err != nil {
 					utils.Logger.Error().Err(err).Msg("Failed to send transaction")
 					continue
 				}
+
 				utils.Logger.Info().Msg("Transaction sent: " + txHash.Hex())
+				info.Tx = nil
 				info.SendingBlock = blockNumber + s.Cache.DelayFactor
 				s.Cache.Data[key] = info
 			}
