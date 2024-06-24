@@ -70,7 +70,7 @@ func (s *EthService) NewBlock(ctx context.Context, blockNumber uint64) {
 				delete(s.Cache.Data, key)
 			} else {
 				fmt.Printf("Sending transaction %s to the sequencer from block listener\n", info.Tx.Hash().Hex())
-				txHash, err := s.SendRawTransaction(ctx, info.Tx.Hash().Hex())
+				txHash, err := s.SendRawTransaction(ctx, info.Tx.Hash().Hex()) // todo change to signed tx
 				if err != nil {
 					utils.Logger.Error().Err(err).Msg("Failed to send transaction")
 					continue
@@ -148,14 +148,9 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	}
 	utils.Logger.Info().Hex("Incoming tx hash", txHash.Bytes()).Hex("Encrypted tx hash", submitTx.Hash().Bytes()).Msg("Transaction sent")
 
-	_, err = bind.WaitMined(ctx, service.Processor.Client, submitTx)
+	_, err = service.WaitMinedFunc(ctx, service.Processor.Client, submitTx)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
-	}
-
-	_, err = service.Cache.ResetEntry(tx, blockNumber)
-	if err != nil {
-		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
 
 	return &txHash, nil

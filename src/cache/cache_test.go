@@ -5,19 +5,19 @@ import (
 	"math/big"
 	"testing"
 
-	test_data "github.com/shutter-network/encrypting-rpc-server/test-data"
+	testdata "github.com/shutter-network/encrypting-rpc-server/test-data"
 	"github.com/stretchr/testify/assert"
 )
 
 // todo update to cover all cases
 
 func TestCache_Key(t *testing.T) {
-	privateKey, fromAddress, err := test_data.GenerateKeyPair()
+	privateKey, fromAddress, err := testdata.GenerateKeyPair()
 	assert.NoError(t, err, "Failed to generate key pair")
 
 	chainID := big.NewInt(1)
 	nonce := uint64(1)
-	_, signedTx, err := test_data.Tx(privateKey, nonce, chainID)
+	_, signedTx, err := testdata.Tx(privateKey, nonce, chainID)
 	assert.NoError(t, err, "Failed to create signed transaction")
 
 	c := NewCache(10)
@@ -32,10 +32,10 @@ func TestCache_Key(t *testing.T) {
 func TestCache_UpdateEntry(t *testing.T) {
 	c := NewCache(10)
 
-	privateKey, fromAddress, err := test_data.GenerateKeyPair()
+	privateKey, fromAddress, err := testdata.GenerateKeyPair()
 	assert.NoError(t, err, "Failed to generate key pair")
 
-	_, signedTx, err := test_data.Tx(privateKey, 1, big.NewInt(1))
+	_, signedTx, err := testdata.Tx(privateKey, 1, big.NewInt(1))
 	assert.NoError(t, err, "Failed to create signed transaction")
 
 	updated, err := c.UpdateEntry(signedTx, 100)

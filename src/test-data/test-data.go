@@ -23,11 +23,14 @@ func GenerateKeyPair() (*ecdsa.PrivateKey, common.Address, error) {
 }
 
 func Tx(privateKey *ecdsa.PrivateKey, nonce uint64, chainID *big.Int) (string, *types.Transaction, error) {
+	return TxWithGas(privateKey, nonce, chainID, big.NewInt(2000000000))
+}
+
+func TxWithGas(privateKey *ecdsa.PrivateKey, nonce uint64, chainID *big.Int, gasPrice *big.Int) (string, *types.Transaction, error) {
 	toAddress := common.HexToAddress("0xC0058BdcC93EaA1afd468f06A26394E2d80c8f01")
 	value := big.NewInt(120000000000) // in wei (0.12 eth)
 	gasLimit := uint64(21000)         // in units
 	maxPriorityFeePerGas := big.NewInt(2000000000)
-	maxFeePerGas := big.NewInt(20000000000)
 
 	tx := types.NewTx(&types.DynamicFeeTx{
 		ChainID:   chainID,
@@ -35,7 +38,7 @@ func Tx(privateKey *ecdsa.PrivateKey, nonce uint64, chainID *big.Int) (string, *
 		To:        &toAddress,
 		Value:     value,
 		Gas:       gasLimit,
-		GasFeeCap: maxFeePerGas,
+		GasFeeCap: gasPrice,
 		GasTipCap: maxPriorityFeePerGas,
 	})
 
