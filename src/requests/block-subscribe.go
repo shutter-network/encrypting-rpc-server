@@ -2,6 +2,7 @@ package requests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -9,7 +10,7 @@ import (
 	"log"
 )
 
-func FetchNewBlocks(webSocketURL string) {
+func FetchNewBlocks(webSocketURL, rpcURL string) {
 	client, err := ethclient.Dial(webSocketURL)
 
 	if err != nil {
@@ -35,7 +36,7 @@ func FetchNewBlocks(webSocketURL string) {
 
 			block, err := client.BlockByHash(context.Background(), header.Hash())
 			if err != nil {
-				if err == ethereum.NotFound {
+				if errors.Is(err, ethereum.NotFound) {
 					log.Fatalf("Block not found: %v", err)
 				} else {
 					log.Fatalf("Failed to retrieve block: %v", err)
@@ -46,7 +47,7 @@ func FetchNewBlocks(webSocketURL string) {
 
 			blockNumber := block.Number().Uint64()
 			// todo reorgs? reintroduce the status field?
-			SendNewBlock(blockNumber)
+			SendNewBlock(blockNumber, rpcURL)
 		}
 	}
 }

@@ -62,7 +62,6 @@ type SequencerContract interface {
 	SubmitEncryptedTransaction(opts *bind.TransactOpts, eon uint64, identityPrefix [32]byte, encryptedTx []byte, gasLimit *big.Int) (*types.Transaction, error)
 }
 
-// EthClientWrapper
 type EthClientWrapper struct {
 	Client *ethclient.Client
 }
