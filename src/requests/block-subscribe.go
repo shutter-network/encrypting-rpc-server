@@ -10,7 +10,7 @@ import (
 	"log"
 )
 
-func FetchNewBlocks(webSocketURL, rpcURL string) {
+func FetchNewBlocks(webSocketURL, httpListenAddress string) {
 	client, err := ethclient.Dial(webSocketURL)
 
 	if err != nil {
@@ -47,7 +47,7 @@ func FetchNewBlocks(webSocketURL, rpcURL string) {
 
 			blockNumber := block.Number().Uint64()
 			// todo reorgs? reintroduce the status field?
-			SendNewBlock(blockNumber, rpcURL)
+			SendNewBlock(blockNumber, httpListenAddress)
 		}
 	}
 }

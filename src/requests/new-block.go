@@ -16,7 +16,7 @@ type RequestPayload struct {
 	JsonRPC string        `json:"jsonrpc"`
 }
 
-func SendNewBlock(blockNumber uint64, rpcURL string) {
+func SendNewBlock(blockNumber uint64, httpListenAddress string) {
 	payload := RequestPayload{
 		Method:  "eth_newBlock",
 		Params:  []interface{}{blockNumber},
@@ -29,7 +29,9 @@ func SendNewBlock(blockNumber uint64, rpcURL string) {
 		log.Fatalf("Error marshaling payload: %v", err)
 	}
 
-	req, err := http.NewRequest("POST", rpcURL, bytes.NewBuffer(data))
+	url := "http://localhost" + httpListenAddress + "/"
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
 	if err != nil {
 		log.Fatalf("Error creating request: %v", err)
 	}

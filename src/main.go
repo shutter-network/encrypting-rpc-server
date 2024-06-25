@@ -123,7 +123,7 @@ func Cmd() *cobra.Command {
 }
 
 func Start() error {
-	go requests.FetchNewBlocks(Config.WebsocketURL, Config.RPCUrl)
+	go requests.FetchNewBlocks(Config.WebsocketURL, Config.HTTPListenAddress)
 
 	signingKey, err := crypto.HexToECDSA(Config.SigningKey)
 	if err != nil {
