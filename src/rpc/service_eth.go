@@ -36,7 +36,7 @@ func ComputeIdentity(prefix []byte, sender common.Address) *shcrypto.EpochID {
 }
 
 type EthService struct {
-	processor Processor
+	processor             Processor
 	processedTransactions map[common.Hash]bool
 }
 
@@ -74,12 +74,12 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
 
-    txHash := tx.Hash()
+	txHash := tx.Hash()
 	_, sent := service.processedTransactions[txHash]
-    if sent {
-        Logger.Info().Hex("Tx hash", txHash.Bytes()).Msg("Transaction already sequenced")
-        return &txHash, nil
-    }
+	if sent {
+		Logger.Info().Hex("Tx hash", txHash.Bytes()).Msg("Transaction already sequenced")
+		return &txHash, nil
+	}
 
 	signer := txtypes.NewLondonSigner(tx.ChainId())
 	fromAddress, err := signer.Sender(tx)
@@ -152,12 +152,15 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
-    Logger.Info().Hex("Incoming tx hash", txHash.Bytes()).Hex("Encrypted tx hash", submitTx.Hash().Bytes()).Msg("Transaction sent")
-	_, err = bind.WaitMined(ctx, service.processor.Client, submitTx)
+	Logger.Info().Hex("Incoming tx hash", txHash.Bytes()).Hex("Encrypted tx hash", submitTx.Hash().Bytes()).Msg("Transaction sent")
+	receipt, err := bind.WaitMined(ctx, service.processor.Client, submitTx)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
 
-    service.processedTransactions[txHash] = true
+	Logger.Info().Msgf("Received transaction receipt with "+
+		"blockNumber at [%d], blockHash at [%s] and transactionHash at [%s]", receipt.BlockNumber, receipt.BlockHash, receipt.TxHash)
+
+	service.processedTransactions[txHash] = true
 	return &txHash, nil
 }
