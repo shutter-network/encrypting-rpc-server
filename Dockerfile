@@ -14,13 +14,14 @@ RUN apk add --no-cache make
 RUN make compile-contracts
 
 FROM golang:1.21-alpine3.17 as appBuilder
+RUN apk add --no-cache gcc g++ musl-dev
 COPY src /src
 COPY --from=contracts /deps/gnosh-contracts/out /gnosh-contracts/out
 COPY --from=goDependencies /go /go
 RUN apk add --no-cache make
 WORKDIR /src
 RUN mkdir /abis
-RUN make build
+RUN CGO_ENABLED=1 GOOS=linux make build
 
 FROM golang:1.21-alpine3.17
 COPY --from=appBuilder /src/bin/encrypting-rpc-server /bin/encrypting-rpc-server
