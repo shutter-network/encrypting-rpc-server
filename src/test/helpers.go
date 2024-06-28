@@ -3,19 +3,20 @@ package test
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
-	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
-	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/server"
+	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 	medleyKeygen "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/testkeygen"
+	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 	"io"
 	"os"
@@ -25,13 +26,12 @@ import (
 )
 
 func init() {
-	TestKeygen = medleyKeygen.NewTestKeyGenerator(&testing.T{}, 3, 2, true)
-
-	TestEonKey = TestKeygen.EonPublicKey([]byte("test"))
+	TestKeygen, _ = medleyKeygen.NewEonKeys(rand.Reader, 3, 2)
+	TestEonKey = TestKeygen.EonPublicKey()
 }
 
 var (
-	TestKeygen      *medleyKeygen.TestKeyGenerator
+	TestKeygen      *medleyKeygen.EonKeys
 	TestEonKey      *shcrypto.EonPublicKey
 	DeployerKey     = "a26ebb1df46424945009db72c7a7ba034027450784b93f34000169b35fd3adaa"
 	DeployerAddress = "0xA868bC7c1AF08B8831795FAC946025557369F69C"
@@ -204,7 +204,7 @@ func SetupServer(ctx context.Context, t *testing.T) error {
 	}
 	cmd := exec.Command("make", "deploy")
 	cmd.Env = os.Environ()
-    cmd.Env = append(cmd.Env, "ETHERSCAN_API_KEY=''")
+	cmd.Env = append(cmd.Env, "ETHERSCAN_API_KEY=''")
 	wd, err := os.Getwd()
 	if err != nil {
 		log.Info().Msg("can not get wd")

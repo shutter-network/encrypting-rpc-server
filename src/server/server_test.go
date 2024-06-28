@@ -127,7 +127,7 @@ func processorTest(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				decryptKey := test.TestKeygen.EpochSecretKey(identityPreimage)
+				decryptKey, _ := test.TestKeygen.EpochSecretKey(identityPreimage)
 				decryptedTx, err := message.Decrypt(decryptKey)
 				if err != nil {
 					return err
