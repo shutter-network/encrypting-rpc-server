@@ -112,7 +112,7 @@ func processorTest(t *testing.T) {
 			return err
 		}
 		opts := bind.FilterOpts{Start: 0}
-		it, err := sequencerContract.FilterTransactionSubmitted(&opts, []uint64{}, []uint64{})
+		it, err := sequencerContract.FilterTransactionSubmitted(&opts)
 		if err != nil {
 			return err
 		}
@@ -127,7 +127,7 @@ func processorTest(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				decryptKey := test.TestKeygen.EpochSecretKey(identityPreimage)
+				decryptKey, _ := test.TestKeygen.EpochSecretKey(identityPreimage)
 				decryptedTx, err := message.Decrypt(decryptKey)
 				if err != nil {
 					return err
