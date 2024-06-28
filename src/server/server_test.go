@@ -112,7 +112,7 @@ func processorTest(t *testing.T) {
 			return err
 		}
 		opts := bind.FilterOpts{Start: 0}
-		it, err := sequencerContract.FilterTransactionSubmitted(&opts, []uint64{}, []uint64{})
+		it, err := sequencerContract.FilterTransactionSubmitted(&opts)
 		if err != nil {
 			return err
 		}
