@@ -165,10 +165,32 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	if err := tx.UnmarshalBinary(b); err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
-	txHash := tx.Hash()
-	txFromAddress, err := utils.SenderAddress(tx)
 
-	if utils.IsCancellationTransaction(tx, txFromAddress) {
+	txHash := tx.Hash()
+	fromAddress, err := utils.SenderAddress(tx)
+	if err != nil {
+		return nil, &EncodingError{StatusCode: -32602, Err: err}
+	}
+
+	accountNonce, err := service.Processor.Client.NonceAt(ctx, fromAddress, nil)
+	if err != nil {
+		return nil, &EncodingError{StatusCode: -32602, Err: err}
+	}
+
+	if accountNonce != tx.Nonce() {
+		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("nonce is not correct")}
+	}
+
+	accountBalance, err := service.Processor.Client.BalanceAt(ctx, fromAddress, nil)
+	if err != nil {
+		return nil, &EncodingError{StatusCode: -32602, Err: err}
+	}
+
+	if accountBalance.Cmp(tx.Cost()) == -1 {
+		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("gas cost is higher")}
+	}
+
+	if utils.IsCancellationTransaction(tx, fromAddress) {
 		utils.Logger.Info().Msg("Detected cancellation transaction, sending it right away...")
 
 		backendClient, err := rpc.Dial(service.Config.BackendURL.String())
@@ -219,29 +241,6 @@ var DefaultWaitMined = func(ctx context.Context, backend bind.DeployBackend, tx 
 }
 
 var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Context, service *EthService, blockNumber uint64, b []byte) (*txtypes.Transaction, error) {
-	signer := txtypes.NewLondonSigner(tx.ChainId())
-	fromAddress, err := signer.Sender(tx)
-	if err != nil {
-		return nil, &EncodingError{StatusCode: -32602, Err: err}
-	}
-	accountNonce, err := service.Processor.Client.NonceAt(ctx, fromAddress, nil)
-	if err != nil {
-		return nil, &EncodingError{StatusCode: -32602, Err: err}
-	}
-
-	if accountNonce != tx.Nonce() {
-		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("nonce is not correct")}
-	}
-
-	accountBalance, err := service.Processor.Client.BalanceAt(ctx, fromAddress, nil)
-	if err != nil {
-		return nil, &EncodingError{StatusCode: -32602, Err: err}
-	}
-
-	if accountBalance.Cmp(tx.Cost()) == -1 {
-		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("gas cost is higher")}
-	}
-
 	eon, err := service.Processor.KeyperSetManagerContract.GetKeyperSetIndexByBlock(nil, blockNumber+uint64(service.Processor.KeyperSetChangeLookAhead))
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
@@ -292,5 +291,4 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 	}
 
 	return submitTx, nil
-
 }

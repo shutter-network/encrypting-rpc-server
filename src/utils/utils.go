@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/joho/godotenv"
@@ -43,26 +42,13 @@ func CheckErr(t *testing.T, err error, message string) {
 }
 
 func SenderAddress(tx *txtypes.Transaction) (common.Address, error) {
-	chainID := tx.ChainId()
-	var signer txtypes.Signer
-
-	switch tx.Type() {
-	case txtypes.LegacyTxType:
-		signer = txtypes.NewEIP155Signer(chainID)
-	case txtypes.AccessListTxType:
-		signer = txtypes.NewEIP2930Signer(chainID)
-	case txtypes.DynamicFeeTxType:
-		signer = txtypes.NewLondonSigner(chainID)
-	default:
-		return common.Address{}, fmt.Errorf("unsupported transaction type: %d", tx.Type())
-	}
-
-	sender, err := txtypes.Sender(signer, tx)
+	signer := txtypes.NewLondonSigner(tx.ChainId())
+	fromAddress, err := signer.Sender(tx)
 	if err != nil {
 		return common.Address{}, err
 	}
 
-	return sender, nil
+	return fromAddress, nil
 }
 
 func IsCancellationTransaction(tx *txtypes.Transaction, fromAddress common.Address) bool {
