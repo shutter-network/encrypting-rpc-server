@@ -47,7 +47,8 @@ func (c *Cache) UpdateEntry(newTx *types.Transaction, currentBlock uint64) (bool
 	if existing, found := c.Data[key]; found {
 		if existing.Tx != nil { // we sent a transaction in the last d blocks
 			// new tx with lower gas -> discard tx
-			utils.Logger.Debug().Msgf("Found cache entry with key [%s] and transaction data [%s]", key, existing)
+			utils.Logger.Debug().Msgf("Found cache entry with key [%s], transaction data Tx [%s] and SentBlock [%d]",
+				key, existing.Tx.Hash().Hex(), existing.SentBlock)
 			if newTx.GasPrice().Cmp(existing.Tx.GasPrice()) <= 0 {
 				utils.Logger.Debug().Msgf("A transaction already exists with a higher gas price. "+
 					"Delaying transaction sending to [%d].", currentBlock)
@@ -66,17 +67,18 @@ func (c *Cache) UpdateEntry(newTx *types.Transaction, currentBlock uint64) (bool
 
 		// tx sent within the last d blocks
 		utils.Logger.Debug().Msgf("Found cache entry with nil value.")
-		utils.Logger.Info().Msgf("Adding transaction with hash [%s] to the cache at key [%s]\n", newTx.Hash(), key)
+		utils.Logger.Debug().Msgf("Adding transaction with hash [%s] to the cache at key [%s]\n", newTx.Hash(), key)
 		txInfo := TransactionInfo{newTx, existing.SentBlock}
 		c.Data[key] = txInfo
-		utils.Logger.Info().Msgf("Cache entry updated to [%S]", c.Data[key])
+		utils.Logger.Debug().Msgf("Cache entry updated to: Tx = [%s] and SentBlock = [%d]",
+			c.Data[key].Tx.Hash().Hex(), c.Data[key].SentBlock)
 		return false, nil // false -> tx won't be sent
 	}
 
 	// no tx sent in the last d blocks
-	utils.Logger.Info().Msgf("Adding transaction with hash [%s] to the cache at key [%s]\n", newTx.Hash(), key)
+	utils.Logger.Debug().Msgf("Adding transaction with hash [%s] to the cache at key [%s]\n", newTx.Hash(), key)
 	c.Data[key] = TransactionInfo{Tx: nil, SentBlock: currentBlock}
-	utils.Logger.Info().Msgf("Cache entry updated to [%S]", c.Data[key])
+	utils.Logger.Debug().Msgf("Cache entry updated to: Tx = nil and SentBlock = [%d]", c.Data[key].SentBlock)
 	return true, nil // true -> send tx
 }
 

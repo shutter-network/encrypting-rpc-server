@@ -3,6 +3,7 @@ package cache
 import (
 	"fmt"
 	"math/big"
+	"sync"
 	"testing"
 
 	testdata "github.com/shutter-network/encrypting-rpc-server/test-data"
@@ -51,5 +52,41 @@ func TestCache_UpdateEntry(t *testing.T) {
 	// Verify that the transaction in the cache matches the signed transaction
 	cachedTxInfo, exists := c.Data[key]
 	assert.True(t, exists, "Expected transaction to be in the cache")
-	assert.Equal(t, signedTx.Hash(), cachedTxInfo.Tx.Hash(), "Expected cached transaction hash does not match")
+	assert.Nil(t, cachedTxInfo.Tx, "Expected cached transaction to be nil")
+}
+
+func TestCacheConcurrentUpdateEntry(t *testing.T) {
+	c := NewCache(10)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	chainID := big.NewInt(3)
+	nonce := uint64(1)
+	privateKey, _, err := testdata.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("Failed to generate key pair: %v", err)
+	}
+
+	go func() {
+		defer wg.Done()
+		_, newTx, err := testdata.Tx(privateKey, nonce, chainID)
+		assert.Nil(t, err, "Error while creating transaction")
+		currentBlock := uint64(1)
+		executed, err := c.UpdateEntry(newTx, currentBlock)
+		assert.Nil(t, err)
+		assert.True(t, executed)
+	}()
+
+	go func() {
+		defer wg.Done()
+		_, newTx, err := testdata.Tx(privateKey, nonce+1, chainID)
+		assert.Nil(t, err, "Error while creating transaction")
+		currentBlock := uint64(2)
+		executed, err := c.UpdateEntry(newTx, currentBlock)
+		assert.Nil(t, err)
+		assert.True(t, executed)
+	}()
+	wg.Wait()
+
+	assert.Equal(t, 2, len(c.Data), "Expected cache to contain 2 entries")
 }
