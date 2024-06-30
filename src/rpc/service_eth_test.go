@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-func setupTest(t *testing.T) (*rpc.EthService, *MockEthereumClient) {
+func initTest(t *testing.T) (*rpc.EthService, *MockEthereumClient) {
 	mockClient := new(MockEthereumClient)
 	mockKeyperSetManager := new(MockKeyperSetManagerContract)
 	mockKeyBroadcast := new(MockKeyBroadcastContract)
@@ -51,6 +51,9 @@ func setupTest(t *testing.T) (*rpc.EthService, *MockEthereumClient) {
 	mockClient.On("NonceAt", mock.Anything, fromAddress, (*big.Int)(nil)).Return(nonce, nil)
 	mockClient.On("BalanceAt", mock.Anything, fromAddress, (*big.Int)(nil)).Return(accountBalance, nil)
 
+	// reset counter at init
+	mockProcessTransactionCallCount = 0
+
 	return service, mockClient
 }
 
@@ -76,7 +79,7 @@ func assertDynamicTxEquality(t *testing.T, cachedTx *types.Transaction, signedTx
 
 // First transaction gets sent and cache gets updated
 func TestSendRawTransaction_Success(t *testing.T) {
-	service, mockClient := setupTest(t)
+	service, mockClient := initTest(t)
 	rawTx1, signedTx, err := testdata.Tx(service.Processor.SigningKey, 1, big.NewInt(1))
 	assert.NoError(t, err, "Failed to create signed transaction")
 
@@ -100,13 +103,13 @@ func TestSendRawTransaction_Success(t *testing.T) {
 	// Cache entry updated correctly
 	cachedTxInfo, exists := service.Cache.Data[key]
 	assert.True(t, exists, "Expected transaction information to be in the cache")
-	assert.Equal(t, cachedTxInfo.SendingBlock, uint64(1), "Expected sending block does not match")
-	assertDynamicTxEquality(t, cachedTxInfo.Tx, signedTx)
+	assert.Equal(t, cachedTxInfo.SentBlock, uint64(1), "Expected sending block does not match")
+	assert.Nil(t, cachedTxInfo.Tx)
 }
 
 // First tx sent and resending delayed
 func TestSendRawTransaction_SameNonce_SameGasPrice_Delayed(t *testing.T) {
-	service, _ := setupTest(t)
+	service, _ := initTest(t)
 	nonce := uint64(1)
 	chainID := big.NewInt(1)
 
@@ -127,7 +130,7 @@ func TestSendRawTransaction_SameNonce_SameGasPrice_Delayed(t *testing.T) {
 	// Transaction resending is delayed
 	cachedTxInfo, exists := service.Cache.Data[key]
 	assert.True(t, exists, "Expected transaction information to be in the cache")
-	assert.Equal(t, cachedTxInfo.SendingBlock, uint64(1)+10, "Expected sending block does not match")
+	assert.Equal(t, cachedTxInfo.SentBlock, uint64(1), "Expected sending block does not match")
 	assertDynamicTxEquality(t, cachedTxInfo.Tx, signedTx1)
 
 	// Only first transaction gets encrypted
@@ -136,7 +139,7 @@ func TestSendRawTransaction_SameNonce_SameGasPrice_Delayed(t *testing.T) {
 
 // First transaction gets sent, second tx with higher gas price gets delayed
 func TestSendRawTransaction_SameNonce_HigherGasPrice_Delayed(t *testing.T) {
-	service, _ := setupTest(t)
+	service, _ := initTest(t)
 	nonce := uint64(1)
 	chainID := big.NewInt(1)
 
@@ -159,7 +162,7 @@ func TestSendRawTransaction_SameNonce_HigherGasPrice_Delayed(t *testing.T) {
 	// Transaction with higher gas price is stored and delayed
 	cachedTxInfo, exists := service.Cache.Data[key]
 	assert.True(t, exists, "Expected transaction information to be in the cache")
-	assert.Equal(t, cachedTxInfo.SendingBlock, uint64(1)+10, "Expected sending block does not match")
+	assert.Equal(t, cachedTxInfo.SentBlock, uint64(1), "Expected sending block does not match")
 	assertDynamicTxEquality(t, cachedTxInfo.Tx, signedTx2)
 
 	// Only first transaction gets encrypted
@@ -167,8 +170,9 @@ func TestSendRawTransaction_SameNonce_HigherGasPrice_Delayed(t *testing.T) {
 }
 
 func TestNewBlock(t *testing.T) {
-	service, mockClient := setupTest(t)
-	blockNumber := uint64(1)
+	service, mockClient := initTest(t)
+	currentBlock := uint64(11)
+	mockClient.On("BlockNumber", mock.Anything).Return(currentBlock, nil)
 	chainID := big.NewInt(1)
 
 	// Populate the cache with unique transactions
@@ -178,7 +182,7 @@ func TestNewBlock(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create key: %v", err)
 		}
-		service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, SendingBlock: blockNumber}
+		service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, SentBlock: uint64(1)}
 		mockClient.On("SendRawTransaction", mock.Anything, signedTx.Hash().Hex()).Return(signedTx.Hash(), nil) // todo correct
 	}
 
@@ -188,7 +192,7 @@ func TestNewBlock(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create key: %v", err)
 		}
-		service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, SendingBlock: blockNumber + 4}
+		service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, SentBlock: uint64(4)}
 	}
 
 	for i := uint64(7); i <= 9; i++ {
@@ -197,10 +201,10 @@ func TestNewBlock(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create key: %v", err)
 		}
-		service.Cache.Data[key] = cache.TransactionInfo{Tx: nil, SendingBlock: blockNumber}
+		service.Cache.Data[key] = cache.TransactionInfo{Tx: nil, SentBlock: uint64(1)}
 	}
 
-	service.NewBlock(context.Background(), blockNumber)
+	service.NewBlock(context.Background(), currentBlock)
 
 	// Verify that the first 3 transactions were sent and updated
 	for i := uint64(1); i <= 3; i++ {
@@ -213,7 +217,7 @@ func TestNewBlock(t *testing.T) {
 		info, exists := service.Cache.Data[key]
 
 		assert.True(t, exists, "Expected transaction information to be in the cache")
-		assert.Equal(t, info.SendingBlock, blockNumber+10, "Expected sending block to be updated")
+		assert.Equal(t, info.SentBlock, currentBlock, "Expected sent block to be updated")
 		assert.Nil(t, info.Tx)
 	}
 
@@ -228,7 +232,7 @@ func TestNewBlock(t *testing.T) {
 		info, exists := service.Cache.Data[key]
 
 		assert.True(t, exists, "Expected transaction information to be in the cache")
-		assert.Equal(t, info.SendingBlock, blockNumber+4, "Expected sending block to remain unchanged")
+		assert.Equal(t, info.SentBlock, uint64(4), "Expected sent block to remain unchanged")
 		assertDynamicTxEquality(t, info.Tx, signedTx)
 	}
 
