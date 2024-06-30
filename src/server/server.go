@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"io"
 	"net/http"
@@ -28,8 +30,6 @@ type JSONRPCProxy struct {
 func (p *JSONRPCProxy) SelectHandler(method string) http.Handler {
 	// route the eth_namespace to the l2-backend
 	switch method {
-	case "eth_newBlock":
-		return p.processor
 	case "eth_sendTransaction":
 		return p.processor
 	case "eth_sendRawTransaction":
@@ -70,24 +70,28 @@ func (p *JSONRPCProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type server struct {
 	processor rpc.Processor
 	config    rpc.Config
+	sub       ethereum.Subscription
+	headers   chan *types.Header
 }
 
-func NewRPCService(processor rpc.Processor, config rpc.Config) medleyService.Service {
+func NewRPCService(processor rpc.Processor, config rpc.Config, sub ethereum.Subscription, headers chan *types.Header) medleyService.Service {
 	return &server{
 		processor: processor,
 		config:    config,
+		sub:       sub,
+		headers:   headers,
 	}
 }
 
-func (srv *server) rpcHandler() (http.Handler, error) {
+func (srv *server) rpcHandler(ctx context.Context) (http.Handler, error) {
 	rpcServices := []rpc.RPCService{
 		&rpc.EthService{},
 	}
 
 	rpcServer := ethrpc.NewServer()
 	for _, service := range rpcServices {
-		service.InjectProcessor(srv.processor)
-		service.AddConfig(srv.config)
+		service.Init(srv.processor, srv.config, srv.sub, srv.headers)
+		service.HandleBlocks(ctx)
 		err := rpcServer.RegisterName(service.Name(), service)
 		if err != nil {
 			return nil, errors.Wrap(err, "error while trying to register RPCService")
@@ -101,11 +105,11 @@ func (srv *server) rpcHandler() (http.Handler, error) {
 	return p, nil
 }
 
-func (srv *server) setupRouter() (*chi.Mux, error) {
+func (srv *server) setupRouter(ctx context.Context) (*chi.Mux, error) {
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
-	handler, err := srv.rpcHandler()
+	handler, err := srv.rpcHandler(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +118,8 @@ func (srv *server) setupRouter() (*chi.Mux, error) {
 }
 
 func (srv *server) Start(ctx context.Context, runner medleyService.Runner) error {
-	handler, err := srv.setupRouter()
+	handler, err := srv.setupRouter(ctx)
+
 	if err != nil {
 		return err
 	}

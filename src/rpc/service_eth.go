@@ -6,13 +6,15 @@ import (
 	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/cache"
-	"github.com/shutter-network/encrypting-rpc-server/requests"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
@@ -42,21 +44,62 @@ type EthService struct {
 	Processor          Processor
 	Config             Config
 	Cache              *cache.Cache
+	sub                ethereum.Subscription
+	headers            chan *types.Header
 	ProcessTransaction func(tx *txtypes.Transaction, ctx context.Context, service *EthService, blockNumber uint64, b []byte) (*txtypes.Transaction, error)
 	WaitMinedFunc      func(ctx context.Context, backend bind.DeployBackend, tx *txtypes.Transaction) (*txtypes.Receipt, error)
 }
 
-func (s *EthService) InjectProcessor(p Processor) {
-	s.Processor = p
-}
-
-func (s *EthService) AddConfig(config Config) {
+func (s *EthService) Init(processor Processor, config Config, sub ethereum.Subscription, headers chan *types.Header) {
+	s.Processor = processor
 	s.Config = config
+	s.sub = sub
+	s.headers = headers
 	s.Cache = cache.NewCache(uint64(config.DelayFactor))
 }
 
 func (s *EthService) Name() string {
 	return "eth"
+}
+
+func (s *EthService) HandleBlocks(ctx context.Context) {
+	sub := s.sub
+	headers := s.headers
+	for {
+		select {
+		case <-ctx.Done():
+			utils.Logger.Info().Msg("Stopped handling blocks due to context completion.")
+			return
+
+		case err := <-sub.Err():
+			utils.Logger.Error().Err(err).Msg("Subscription error")
+
+		case header := <-headers:
+			blockHash := header.Hash()
+			utils.Logger.Debug().Msgf("Received block hash [%s]", blockHash)
+
+			client, err := ethclient.Dial(s.Config.BackendURL.String())
+			if err != nil {
+				utils.Logger.Err(err).Msg("Failed to connect to the Ethereum client")
+			}
+
+			block, err := client.BlockByHash(context.Background(), header.Hash())
+			if err != nil {
+				if errors.Is(err, ethereum.NotFound) {
+					utils.Logger.Err(err).Msg("Block not found") // todo retry
+				} else {
+					utils.Logger.Err(err).Msg("Failed to retrieve block")
+				}
+			}
+
+			blockNumber := block.Number().Uint64()
+			utils.Logger.Info().Msgf("Retrieved block number [%d]", blockNumber)
+
+			s.NewBlock(ctx, blockNumber)
+
+		}
+	}
+
 }
 
 func (s *EthService) NewBlock(ctx context.Context, blockNumber uint64) {
@@ -130,10 +173,14 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 
 		backendClient, err := rpc.Dial(service.Config.BackendURL.String())
 		if err != nil {
-			utils.Logger.Err(err).Msg("Failed to connect to the Ethereum client")
+			return nil, &EncodingError{StatusCode: -32603, Err: err}
 		}
 
-		txHash := requests.SendTx(backendClient, s)
+		err = backendClient.CallContext(ctx, &txHash, "eth_sendRawTransaction", s)
+		if err != nil {
+			return nil, &EncodingError{StatusCode: -32602, Err: err}
+		}
+
 		utils.Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
 		return &txHash, nil
 	}
@@ -141,7 +188,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	updated, err := service.Cache.UpdateEntry(tx, blockNumber)
 	if err != nil {
 		utils.Logger.Err(err).Msg("Failed to update the cache.")
-		return nil, &EncodingError{StatusCode: -32602, Err: err} // todo check if necessary
+		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
 
 	if !updated {

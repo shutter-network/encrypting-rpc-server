@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/rs/zerolog/log"
-	"github.com/shutter-network/encrypting-rpc-server/requests"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
@@ -123,7 +123,18 @@ func Cmd() *cobra.Command {
 }
 
 func Start() error {
-	go requests.FetchNewBlocks(Config.WebsocketURL, Config.HTTPListenAddress)
+
+	wsClient, err := ethclient.Dial(Config.WebsocketURL)
+	if err != nil {
+		utils.Logger.Err(err).Msg("Failed to connect to websocket")
+	}
+
+	headers := make(chan *types.Header)
+
+	sub, err := wsClient.SubscribeNewHead(context.Background(), headers)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to subscribe to new head")
+	} // todo retry?
 
 	signingKey, err := crypto.HexToECDSA(Config.SigningKey)
 	if err != nil {
@@ -193,7 +204,7 @@ func Start() error {
 		HTTPListenAddress: Config.HTTPListenAddress,
 	}
 
-	service := server.NewRPCService(processor, config)
+	service := server.NewRPCService(processor, config, sub, headers)
 	utils.Logger.Info().Str("listen-on", Config.HTTPListenAddress).Msg("Serving JSON-RPC")
 
 	func() {
