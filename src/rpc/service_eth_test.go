@@ -171,7 +171,7 @@ func TestSendRawTransaction_SameNonce_HigherGasPrice_Delayed(t *testing.T) {
 
 func TestNewBlock(t *testing.T) {
 	service, mockClient := initTest(t)
-	currentBlock := uint64(11)
+	currentBlock := uint64(13)
 	mockClient.On("BlockNumber", mock.Anything).Return(currentBlock, nil)
 	chainID := big.NewInt(1)
 
@@ -182,7 +182,7 @@ func TestNewBlock(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create key: %v", err)
 		}
-		service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, SentBlock: uint64(1)}
+		service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, SentBlock: i}
 		mockClient.On("SendRawTransaction", mock.Anything, signedTx.Hash().Hex()).Return(signedTx.Hash(), nil) // todo correct
 	}
 
@@ -201,7 +201,7 @@ func TestNewBlock(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create key: %v", err)
 		}
-		service.Cache.Data[key] = cache.TransactionInfo{Tx: nil, SentBlock: uint64(1)}
+		service.Cache.Data[key] = cache.TransactionInfo{Tx: nil, SentBlock: uint64(i - 6)}
 	}
 
 	service.NewBlock(context.Background(), currentBlock)

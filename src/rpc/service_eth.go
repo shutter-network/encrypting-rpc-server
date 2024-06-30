@@ -62,7 +62,7 @@ func (s *EthService) Name() string {
 func (s *EthService) NewBlock(ctx context.Context, blockNumber uint64) {
 	utils.Logger.Info().Msg(fmt.Sprintf("Received blockNumber: %d", blockNumber))
 	for key, info := range s.Cache.Data {
-		if info.SentBlock+s.Cache.DelayFactor == blockNumber { // todo reorg issue? <=
+		if info.SentBlock+s.Cache.DelayFactor <= blockNumber {
 			if info.Tx == nil {
 				utils.Logger.Debug().Msgf("Deleting entry at key [%s]", key)
 				delete(s.Cache.Data, key)
