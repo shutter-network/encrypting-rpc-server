@@ -6,19 +6,17 @@ import (
 	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/core/types"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/cache"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 	"math/big"
+	"time"
 )
 
 var (
@@ -44,73 +42,48 @@ type EthService struct {
 	Processor          Processor
 	Config             Config
 	Cache              *cache.Cache
-	sub                ethereum.Subscription
-	headers            chan *types.Header
 	ProcessTransaction func(tx *txtypes.Transaction, ctx context.Context, service *EthService, blockNumber uint64, b []byte) (*txtypes.Transaction, error)
 	WaitMinedFunc      func(ctx context.Context, backend bind.DeployBackend, tx *txtypes.Transaction) (*txtypes.Receipt, error)
 }
 
-func (s *EthService) Init(processor Processor, config Config, sub ethereum.Subscription, headers chan *types.Header) {
+func (s *EthService) Init(processor Processor, config Config) {
 	s.Processor = processor
 	s.Config = config
-	s.sub = sub
-	s.headers = headers
-	s.Cache = cache.NewCache(uint64(config.DelayFactor))
+	s.Cache = cache.NewCache(uint64(config.DelayInSeconds))
 }
 
 func (s *EthService) Name() string {
 	return "eth"
 }
 
-func (s *EthService) HandleBlocks(ctx context.Context) {
-	sub := s.sub
-	headers := s.headers
+func (s *EthService) SendTimeEvents(ctx context.Context, delayInSeconds int) {
+	timer := time.NewTicker(time.Duration(delayInSeconds) * time.Second)
+
 	for {
 		select {
 		case <-ctx.Done():
-			utils.Logger.Info().Msg("Stopped handling blocks due to context completion.")
+			utils.Logger.Info().Msg("Stopping because context is done.")
 			return
 
-		case err := <-sub.Err():
-			utils.Logger.Error().Err(err).Msg("Subscription error")
+		case tickTime := <-timer.C:
+			newTime := tickTime.Unix()
+			utils.Logger.Debug().Msgf("Received timer event | Unix time = [%d] | Time = [%v]",
+				newTime, time.Unix(newTime, 0))
 
-		case header := <-headers:
-			blockHash := header.Hash()
-			utils.Logger.Debug().Msgf("Received block hash [%s]", blockHash)
-
-			client, err := ethclient.Dial(s.Config.BackendURL.String())
-			if err != nil {
-				utils.Logger.Err(err).Msg("Failed to connect to the Ethereum client")
-			}
-
-			block, err := client.BlockByHash(context.Background(), header.Hash())
-			if err != nil {
-				if errors.Is(err, ethereum.NotFound) {
-					utils.Logger.Err(err).Msg("Block not found") // todo retry
-				} else {
-					utils.Logger.Err(err).Msg("Failed to retrieve block")
-				}
-			}
-
-			blockNumber := block.Number().Uint64()
-			utils.Logger.Info().Msgf("Retrieved block number [%d]", blockNumber)
-
-			s.NewBlock(ctx, blockNumber)
-
+			s.NewTimeEvent(ctx, uint64(newTime))
 		}
 	}
-
 }
 
-func (s *EthService) NewBlock(ctx context.Context, blockNumber uint64) {
-	utils.Logger.Info().Msg(fmt.Sprintf("Received blockNumber: %d", blockNumber))
+func (s *EthService) NewTimeEvent(ctx context.Context, newTime uint64) {
+	utils.Logger.Info().Msg(fmt.Sprintf("Received new time event: %d", newTime))
 	for key, info := range s.Cache.Data {
-		if info.SentBlock+s.Cache.DelayFactor <= blockNumber {
+		if info.CachedTime+s.Cache.DelayFactor <= newTime {
 			if info.Tx == nil {
 				utils.Logger.Debug().Msgf("Deleting entry at key [%s]", key)
 				delete(s.Cache.Data, key)
 			} else {
-				utils.Logger.Debug().Msgf("Sending transaction [%s] to the sequencer from block listener", info.Tx.Hash().Hex())
+				utils.Logger.Debug().Msgf("Sending transaction [%s]", info.Tx.Hash().Hex())
 				rawTxBytes, err := info.Tx.MarshalBinary()
 				if err != nil {
 					utils.Logger.Error().Err(err).Msg("Failed to marshal data")
@@ -126,7 +99,7 @@ func (s *EthService) NewBlock(ctx context.Context, blockNumber uint64) {
 
 				utils.Logger.Info().Msg("Transaction sent: " + txHash.Hex())
 				info.Tx = nil
-				info.SentBlock = blockNumber
+				info.CachedTime = newTime
 				s.Cache.Data[key] = info
 			}
 		}
@@ -207,7 +180,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return &txHash, nil
 	}
 
-	updated, err := service.Cache.UpdateEntry(tx, blockNumber)
+	updated, err := service.Cache.UpdateEntry(tx, uint64(time.Now().Unix()))
 	if err != nil {
 		utils.Logger.Err(err).Msg("Failed to update the cache.")
 		return nil, &EncodingError{StatusCode: -32603, Err: err}

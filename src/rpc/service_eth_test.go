@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"math/big"
 	"testing"
+	"time"
 )
 
 func initTest(t *testing.T) (*rpc.EthService, *MockEthereumClient) {
@@ -102,8 +103,9 @@ func TestSendRawTransaction_Success(t *testing.T) {
 
 	// Cache entry updated correctly
 	cachedTxInfo, exists := service.Cache.Data[key]
+
 	assert.True(t, exists, "Expected transaction information to be in the cache")
-	assert.Equal(t, cachedTxInfo.SentBlock, uint64(1), "Expected sending block does not match")
+	assert.Equal(t, uint64(time.Now().Unix()), cachedTxInfo.CachedTime, "Expected sending block does not match")
 	assert.Nil(t, cachedTxInfo.Tx)
 }
 
@@ -130,7 +132,7 @@ func TestSendRawTransaction_SameNonce_SameGasPrice_Delayed(t *testing.T) {
 	// Transaction resending is delayed
 	cachedTxInfo, exists := service.Cache.Data[key]
 	assert.True(t, exists, "Expected transaction information to be in the cache")
-	assert.Equal(t, cachedTxInfo.SentBlock, uint64(1), "Expected sending block does not match")
+	assert.Equal(t, uint64(time.Now().Unix()), cachedTxInfo.CachedTime, "Expected sending block does not match")
 	assertDynamicTxEquality(t, cachedTxInfo.Tx, signedTx1)
 
 	// Only first transaction gets encrypted
@@ -162,89 +164,76 @@ func TestSendRawTransaction_SameNonce_HigherGasPrice_Delayed(t *testing.T) {
 	// Transaction with higher gas price is stored and delayed
 	cachedTxInfo, exists := service.Cache.Data[key]
 	assert.True(t, exists, "Expected transaction information to be in the cache")
-	assert.Equal(t, cachedTxInfo.SentBlock, uint64(1), "Expected sending block does not match")
+	assert.Equal(t, uint64(time.Now().Unix()), cachedTxInfo.CachedTime, "Expected sending block does not match")
 	assertDynamicTxEquality(t, cachedTxInfo.Tx, signedTx2)
 
 	// Only first transaction gets encrypted
 	assert.Equal(t, mockProcessTransactionCallCount, 1, "Expected ProcessTransaction to be called once")
 }
 
-func TestNewBlock(t *testing.T) {
-	service, mockClient := initTest(t)
-	currentBlock := uint64(13)
-	mockClient.On("BlockNumber", mock.Anything).Return(currentBlock, nil)
+func TestNewTimeEvent_UpdateTxInfo(t *testing.T) {
+	service, _ := initTest(t)
+	currentTime := uint64(13)
 	chainID := big.NewInt(1)
 
-	// Populate the cache with unique transactions
-	for i := uint64(1); i <= 3; i++ {
-		_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, i, chainID)
-		key, err := service.Cache.Key(signedTx)
-		if err != nil {
-			t.Fatalf("Failed to create key: %v", err)
-		}
-		service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, SentBlock: i}
-		mockClient.On("SendRawTransaction", mock.Anything, signedTx.Hash().Hex()).Return(signedTx.Hash(), nil) // todo correct
+	_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, 1, chainID)
+
+	key, err := service.Cache.Key(signedTx)
+	if err != nil {
+		t.Fatalf("Failed to create key: %v", err)
 	}
 
-	for i := uint64(4); i <= 6; i++ {
-		_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, i, chainID)
-		key, err := service.Cache.Key(signedTx)
-		if err != nil {
-			t.Fatalf("Failed to create key: %v", err)
-		}
-		service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, SentBlock: uint64(4)}
+	service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, CachedTime: 1}
+
+	service.NewTimeEvent(context.Background(), currentTime)
+
+	info, exists := service.Cache.Data[key]
+
+	assert.True(t, exists, "Expected transaction information to be in the cache")
+	assert.Equal(t, info.CachedTime, currentTime, "Expected cached time to be updated")
+	assert.Nil(t, info.Tx)
+}
+
+func TestNewTimeEvent_KeepTxInfo(t *testing.T) {
+	service, _ := initTest(t)
+	currentTime := uint64(13)
+	chainID := big.NewInt(1)
+
+	_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, 1, chainID)
+
+	key, err := service.Cache.Key(signedTx)
+	if err != nil {
+		t.Fatalf("Failed to create key: %v", err)
 	}
 
-	for i := uint64(7); i <= 9; i++ {
-		_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, i, chainID)
-		key, err := service.Cache.Key(signedTx)
-		if err != nil {
-			t.Fatalf("Failed to create key: %v", err)
-		}
-		service.Cache.Data[key] = cache.TransactionInfo{Tx: nil, SentBlock: uint64(i - 6)}
+	service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, CachedTime: uint64(4)}
+
+	service.NewTimeEvent(context.Background(), currentTime)
+
+	info, exists := service.Cache.Data[key]
+
+	assert.True(t, exists, "Expected transaction information to be in the cache")
+	assert.Equal(t, info.CachedTime, uint64(4), "Expected cached time to remain unchanged")
+	assertDynamicTxEquality(t, info.Tx, signedTx)
+}
+
+func TestNewTimeEvent_DeleteTxInfo(t *testing.T) {
+	service, _ := initTest(t)
+	currentTime := uint64(13)
+	chainID := big.NewInt(1)
+
+	_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, 1, chainID)
+
+	key, err := service.Cache.Key(signedTx)
+	if err != nil {
+		t.Fatalf("Failed to create key: %v", err)
 	}
 
-	service.NewBlock(context.Background(), currentBlock)
+	service.Cache.Data[key] = cache.TransactionInfo{Tx: nil, CachedTime: 3}
 
-	// Verify that the first 3 transactions were sent and updated
-	for i := uint64(1); i <= 3; i++ {
-		_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, i, chainID)
-		key, err := service.Cache.Key(signedTx)
-		if err != nil {
-			t.Fatalf("Failed to create key: %v", err)
-		}
+	service.NewTimeEvent(context.Background(), currentTime)
 
-		info, exists := service.Cache.Data[key]
+	_, exists := service.Cache.Data[key]
 
-		assert.True(t, exists, "Expected transaction information to be in the cache")
-		assert.Equal(t, info.SentBlock, currentBlock, "Expected sent block to be updated")
-		assert.Nil(t, info.Tx)
-	}
-
-	// Verify that the second 3 transactions remain unchanged
-	for i := uint64(4); i <= 6; i++ {
-		_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, i, chainID)
-		key, err := service.Cache.Key(signedTx)
-		if err != nil {
-			t.Fatalf("Failed to create key: %v", err)
-		}
-
-		info, exists := service.Cache.Data[key]
-
-		assert.True(t, exists, "Expected transaction information to be in the cache")
-		assert.Equal(t, info.SentBlock, uint64(4), "Expected sent block to remain unchanged")
-		assertDynamicTxEquality(t, info.Tx, signedTx)
-	}
-
-	// Verify that the entries with nil transactions were deleted
-	for i := uint64(7); i <= 9; i++ {
-		_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, i, chainID)
-		key, err := service.Cache.Key(signedTx)
-		if err != nil {
-			t.Fatalf("Failed to create key: %v", err)
-		}
-		_, exists := service.Cache.Data[key]
-
-		assert.False(t, exists, "Expected transaction information to be deleted from the cache")
-	}
+	assert.False(t, exists, "Expected transaction information to be deleted from the cache")
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/rs/zerolog/log"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
@@ -35,7 +34,7 @@ var Config struct {
 	KeyBroadcastContractAddress string `mapstructure:"key-broadcast-contract-address"`
 	SequencerAddress            string `mapstructure:"sequencer-address"`
 	KeyperSetManagerAddress     string `mapstructure:"keyperset-manager-address"`
-	DelayFactor                 int    `mapstructure:"delay-factor"`
+	DelayInSeconds              int    `mapstructure:"delay-in-seconds"`
 }
 
 func Cmd() *cobra.Command {
@@ -112,30 +111,17 @@ func Cmd() *cobra.Command {
 	)
 
 	cmd.PersistentFlags().IntVarP(
-		&Config.DelayFactor,
-		"delay-factor",
+		&Config.DelayInSeconds,
+		"delay-in-seconds",
 		"",
 		10,
-		"Server cache delay factor",
+		"Server cache delay in seconds",
 	)
 
 	return cmd
 }
 
 func Start() error {
-
-	wsClient, err := ethclient.Dial(Config.WebsocketURL)
-	if err != nil {
-		utils.Logger.Err(err).Msg("Failed to connect to websocket")
-	}
-
-	headers := make(chan *types.Header)
-
-	sub, err := wsClient.SubscribeNewHead(context.Background(), headers)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to subscribe to new head")
-	} // todo retry?
-
 	signingKey, err := crypto.HexToECDSA(Config.SigningKey)
 	if err != nil {
 		utils.Logger.Fatal().Err(err).Msg("failed to parse signing key")
@@ -202,9 +188,10 @@ func Start() error {
 	config := rpc.Config{
 		BackendURL:        backendURL,
 		HTTPListenAddress: Config.HTTPListenAddress,
+		DelayInSeconds:    Config.DelayInSeconds,
 	}
 
-	service := server.NewRPCService(processor, config, sub, headers)
+	service := server.NewRPCService(processor, config)
 	utils.Logger.Info().Str("listen-on", Config.HTTPListenAddress).Msg("Serving JSON-RPC")
 
 	func() {

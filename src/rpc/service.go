@@ -3,7 +3,6 @@ package rpc
 import (
 	"context"
 	"crypto/ecdsa"
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -26,17 +25,16 @@ type Processor struct {
 
 type Config struct {
 	BackendURL        *url.URL
-	WebsocketURL      *url.URL
 	HTTPListenAddress string
-	DelayFactor       int
+	DelayInSeconds    int
 }
 
 type RPCService interface {
 	Name() string
-	NewBlock(ctx context.Context, blockNumber uint64)
+	NewTimeEvent(ctx context.Context, newTime uint64)
 	SendRawTransaction(ctx context.Context, s string) (*common.Hash, error)
-	Init(processor Processor, config Config, sub ethereum.Subscription, headers chan *types.Header)
-	HandleBlocks(ctx context.Context)
+	Init(processor Processor, config Config)
+	SendTimeEvents(ctx context.Context, delayInSeconds int)
 }
 
 type EthereumClient interface {

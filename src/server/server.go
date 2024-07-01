@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"io"
 	"net/http"
@@ -70,16 +68,12 @@ func (p *JSONRPCProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type server struct {
 	processor rpc.Processor
 	config    rpc.Config
-	sub       ethereum.Subscription
-	headers   chan *types.Header
 }
 
-func NewRPCService(processor rpc.Processor, config rpc.Config, sub ethereum.Subscription, headers chan *types.Header) medleyService.Service {
+func NewRPCService(processor rpc.Processor, config rpc.Config) medleyService.Service {
 	return &server{
 		processor: processor,
 		config:    config,
-		sub:       sub,
-		headers:   headers,
 	}
 }
 
@@ -90,8 +84,11 @@ func (srv *server) rpcHandler(ctx context.Context) (http.Handler, error) {
 
 	rpcServer := ethrpc.NewServer()
 	for _, service := range rpcServices {
-		service.Init(srv.processor, srv.config, srv.sub, srv.headers)
-		service.HandleBlocks(ctx)
+		println(srv.config.DelayInSeconds)
+		println(srv.config.BackendURL)
+
+		service.Init(srv.processor, srv.config)
+		go service.SendTimeEvents(ctx, srv.config.DelayInSeconds)
 		err := rpcServer.RegisterName(service.Name(), service)
 		if err != nil {
 			return nil, errors.Wrap(err, "error while trying to register RPCService")

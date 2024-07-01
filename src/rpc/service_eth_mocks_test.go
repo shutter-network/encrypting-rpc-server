@@ -30,9 +30,8 @@ type MockSequencerContract struct {
 func MockConfig() rpc.Config {
 	return rpc.Config{
 		BackendURL:        &url.URL{},
-		WebsocketURL:      &url.URL{},
 		HTTPListenAddress: ":8546",
-		DelayFactor:       10,
+		DelayInSeconds:    10,
 	}
 }
 
