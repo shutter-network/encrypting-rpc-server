@@ -10,10 +10,10 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.28.0
-	github.com/shutter-network/gnosh-contracts v0.2.0
+	github.com/shutter-network/gnosh-contracts v0.4.0
 	github.com/shutter-network/rolling-shutter/rolling-shutter v0.0.7-0.20231114104306-f1b9a8f366b2
 	github.com/shutter-network/shop-contracts v0.0.0-20240407183559-9504b6278cef
-	github.com/shutter-network/shutter/shlib v0.1.19-0.20240520193152-f4f56ef19f9e
+	github.com/shutter-network/shutter/shlib v0.1.19
 	github.com/spf13/cobra v1.6.1
 	github.com/stretchr/testify v1.9.0
 )
