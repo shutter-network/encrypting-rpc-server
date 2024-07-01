@@ -84,9 +84,6 @@ func (srv *server) rpcHandler(ctx context.Context) (http.Handler, error) {
 
 	rpcServer := ethrpc.NewServer()
 	for _, service := range rpcServices {
-		println(srv.config.DelayInSeconds)
-		println(srv.config.BackendURL)
-
 		service.Init(srv.processor, srv.config)
 		go service.SendTimeEvents(ctx, srv.config.DelayInSeconds)
 		err := rpcServer.RegisterName(service.Name(), service)
