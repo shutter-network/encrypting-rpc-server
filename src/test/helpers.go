@@ -229,7 +229,7 @@ func SetupServer(ctx context.Context, t *testing.T) error {
 		BackendURL:        backendUrl,
 		HTTPListenAddress: processor.URL,
 	}
-	service := server.NewRPCService(processor, config, nil, nil)
+	service := server.NewRPCService(processor, config)
 	go func() {
 		err := medleyService.Run(ctx, service)
 		if err != nil {
