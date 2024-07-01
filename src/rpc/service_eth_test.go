@@ -38,7 +38,6 @@ func initTest(t *testing.T) (*rpc.EthService, *MockEthereumClient) {
 		Cache:              cache.NewCache(10),
 		Config:             config,
 		ProcessTransaction: mockProcessTransaction,
-		WaitMinedFunc:      mockWaitMined,
 	}
 
 	nonce := uint64(1)

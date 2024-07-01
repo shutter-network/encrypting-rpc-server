@@ -42,14 +42,6 @@ func mockProcessTransaction(tx *types.Transaction, ctx context.Context, service 
 	return tx, nil
 }
 
-func mockWaitMined(ctx context.Context, client bind.DeployBackend, tx *types.Transaction) (*types.Receipt, error) {
-	receipt := &types.Receipt{
-		Status: types.ReceiptStatusSuccessful,
-		TxHash: tx.Hash(),
-	}
-	return receipt, nil
-}
-
 func (m *MockEthereumClient) PendingNonceAt(ctx context.Context, account common.Address) (uint64, error) {
 	args := m.Called(ctx, account)
 	return args.Get(0).(uint64), args.Error(1)
