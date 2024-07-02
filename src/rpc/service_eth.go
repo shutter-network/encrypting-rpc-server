@@ -78,10 +78,10 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime uint64) {
 	utils.Logger.Info().Msg(fmt.Sprintf("Received new time event: %d", newTime))
 	for key, info := range s.Cache.Data {
 		if info.CachedTime+s.Cache.DelayFactor <= newTime {
-			if info.Tx == nil {
-				utils.Logger.Debug().Msgf("Deleting entry at key [%s]", key)
-				delete(s.Cache.Data, key)
-			} else {
+			utils.Logger.Debug().Msgf("Deleting entry at key [%s]", key)
+			delete(s.Cache.Data, key)
+
+			if info.Tx != nil {
 				utils.Logger.Debug().Msgf("Sending transaction [%s]", info.Tx.Hash().Hex())
 				rawTxBytes, err := info.Tx.MarshalBinary()
 				if err != nil {
@@ -89,17 +89,14 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime uint64) {
 				}
 
 				rawTx := "0x" + common.Bytes2Hex(rawTxBytes)
-
 				txHash, err := s.SendRawTransaction(ctx, rawTx)
+
 				if err != nil {
-					utils.Logger.Error().Err(err).Msg("Failed to send transaction")
+					utils.Logger.Error().Err(err).Msgf("Failed to send transaction.")
 					continue
 				}
 
-				utils.Logger.Info().Msg("Transaction sent: " + txHash.Hex())
-				info.Tx = nil
-				info.CachedTime = newTime
-				s.Cache.Data[key] = info
+				utils.Logger.Info().Msg("Transaction sent internally: " + txHash.Hex())
 			}
 		}
 	}

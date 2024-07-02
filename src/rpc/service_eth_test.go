@@ -165,7 +165,7 @@ func TestSendRawTransaction_SameNonce_HigherGasPrice_Delayed(t *testing.T) {
 
 func TestNewTimeEvent_UpdateTxInfo(t *testing.T) {
 	service := initTest(t)
-	currentTime := uint64(13)
+	currentTime := uint64(time.Now().Unix())
 	chainID := big.NewInt(1)
 
 	_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, 1, chainID)
@@ -182,7 +182,7 @@ func TestNewTimeEvent_UpdateTxInfo(t *testing.T) {
 	info, exists := service.Cache.Data[key]
 
 	assert.True(t, exists, "Expected transaction information to be in the cache")
-	assert.Equal(t, info.CachedTime, currentTime, "Expected cached time to be updated")
+	assert.Equal(t, currentTime, info.CachedTime, "Expected cached time to be updated")
 	assert.Nil(t, info.Tx)
 }
 
