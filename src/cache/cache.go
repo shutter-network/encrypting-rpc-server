@@ -81,17 +81,3 @@ func (c *Cache) UpdateEntry(newTx *types.Transaction, currentTime uint64) (bool,
 	utils.Logger.Debug().Msgf("Cache entry updated to: Tx = nil and CachedTime = [%d]", c.Data[key].CachedTime)
 	return true, nil // true -> send tx
 }
-
-func (c *Cache) DeleteEntry(tx *types.Transaction) (bool, error) {
-	key, err := c.Key(tx)
-	if err != nil {
-		return false, err
-	}
-
-	c.Lock()
-	defer c.Unlock()
-
-	utils.Logger.Info().Msgf("Deleting entry at key %s", key)
-	delete(c.Data, key)
-	return true, nil
-}
