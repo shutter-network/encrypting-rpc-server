@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func initTest(t *testing.T) (*rpc.EthService, *MockEthereumClient) {
+func initTest(t *testing.T) *rpc.EthService {
 	mockClient := new(MockEthereumClient)
 	mockKeyperSetManager := new(MockKeyperSetManagerContract)
 	mockKeyBroadcast := new(MockKeyBroadcastContract)
@@ -54,7 +54,7 @@ func initTest(t *testing.T) (*rpc.EthService, *MockEthereumClient) {
 	// reset counter at init
 	mockProcessTransactionCallCount = 0
 
-	return service, mockClient
+	return service
 }
 
 func assertDynamicTxEquality(t *testing.T, cachedTx *types.Transaction, signedTx *types.Transaction) {
@@ -79,16 +79,9 @@ func assertDynamicTxEquality(t *testing.T, cachedTx *types.Transaction, signedTx
 
 // First transaction gets sent and cache gets updated
 func TestSendRawTransaction_Success(t *testing.T) {
-	service, mockClient := initTest(t)
+	service := initTest(t)
 	rawTx1, signedTx, err := testdata.Tx(service.Processor.SigningKey, 1, big.NewInt(1))
 	assert.NoError(t, err, "Failed to create signed transaction")
-
-	receipt := &types.Receipt{
-		Status: types.ReceiptStatusSuccessful,
-		TxHash: signedTx.Hash(),
-	}
-
-	mockClient.On("TransactionReceipt", mock.Anything, mock.Anything).Return(receipt, nil)
 
 	// Send the transaction
 	txHash, err := service.SendRawTransaction(context.Background(), rawTx1)
@@ -110,7 +103,7 @@ func TestSendRawTransaction_Success(t *testing.T) {
 
 // First tx sent and resending delayed
 func TestSendRawTransaction_SameNonce_SameGasPrice_Delayed(t *testing.T) {
-	service, _ := initTest(t)
+	service := initTest(t)
 	nonce := uint64(1)
 	chainID := big.NewInt(1)
 
@@ -140,7 +133,7 @@ func TestSendRawTransaction_SameNonce_SameGasPrice_Delayed(t *testing.T) {
 
 // First transaction gets sent, second tx with higher gas price gets delayed
 func TestSendRawTransaction_SameNonce_HigherGasPrice_Delayed(t *testing.T) {
-	service, _ := initTest(t)
+	service := initTest(t)
 	nonce := uint64(1)
 	chainID := big.NewInt(1)
 
@@ -171,7 +164,7 @@ func TestSendRawTransaction_SameNonce_HigherGasPrice_Delayed(t *testing.T) {
 }
 
 func TestNewTimeEvent_UpdateTxInfo(t *testing.T) {
-	service, _ := initTest(t)
+	service := initTest(t)
 	currentTime := uint64(13)
 	chainID := big.NewInt(1)
 
@@ -194,7 +187,7 @@ func TestNewTimeEvent_UpdateTxInfo(t *testing.T) {
 }
 
 func TestNewTimeEvent_KeepTxInfo(t *testing.T) {
-	service, _ := initTest(t)
+	service := initTest(t)
 	currentTime := uint64(13)
 	chainID := big.NewInt(1)
 
@@ -217,7 +210,7 @@ func TestNewTimeEvent_KeepTxInfo(t *testing.T) {
 }
 
 func TestNewTimeEvent_DeleteTxInfo(t *testing.T) {
-	service, _ := initTest(t)
+	service := initTest(t)
 	currentTime := uint64(13)
 	chainID := big.NewInt(1)
 

@@ -145,7 +145,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
 
-	if accountNonce != tx.Nonce() {
+	if accountNonce > tx.Nonce() {
 		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("nonce is not correct")}
 	}
 
