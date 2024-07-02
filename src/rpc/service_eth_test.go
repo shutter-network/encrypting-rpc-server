@@ -101,6 +101,37 @@ func TestSendRawTransaction_Success(t *testing.T) {
 	assert.Nil(t, cachedTxInfo.Tx)
 }
 
+func TestSendRawTransaction_TransactionInvalidNonce_NotSent(t *testing.T) {
+	service := initTest(t)
+
+	wrongNonce := uint64(0)
+	chainID := big.NewInt(1)
+	rawTx, _, err := testdata.Tx(service.Processor.SigningKey, wrongNonce, chainID)
+	assert.NoError(t, err, "Failed to create signed transaction")
+
+	_, err = service.SendRawTransaction(context.Background(), rawTx)
+	assert.Error(t, err, "Expected the SendRawTransaction function to return an error")
+
+	encodingErr, ok := err.(*rpc.EncodingError)
+	assert.True(t, ok, "Expected error of type *EncodingError")
+	assert.Equal(t, encodingErr.StatusCode, -32000, "Expected specific status code for invalid nonce error")
+}
+
+func TestSendRawTransaction_TransactionInvalid_GasCost_Higher(t *testing.T) {
+	service := initTest(t)
+
+	highCost := new(big.Int).Mul(big.NewInt(10), big.NewInt(1e18))
+	rawTx, _, err := testdata.TxWithGas(service.Processor.SigningKey, 1, big.NewInt(1), highCost)
+	assert.NoError(t, err, "Failed to create signed transaction")
+
+	_, err = service.SendRawTransaction(context.Background(), rawTx)
+	assert.Error(t, err, "Expected the SendRawTransaction function to return an error")
+
+	encodingErr, ok := err.(*rpc.EncodingError)
+	assert.True(t, ok, "Expected error of type *EncodingError")
+	assert.Equal(t, encodingErr.StatusCode, -32000, "Expected specific status code for high gas cost error")
+}
+
 // First tx sent and resending delayed
 func TestSendRawTransaction_SameNonce_SameGasPrice_Delayed(t *testing.T) {
 	service := initTest(t)
