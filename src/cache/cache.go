@@ -45,7 +45,7 @@ func (c *Cache) UpdateEntry(newTx *types.Transaction, currentTime uint64) (bool,
 
 	utils.Logger.Debug().Msgf("Attempting to update cache with key [%s] and transaction hash [%s]", key, newTx.Hash().Hex())
 	if existing, found := c.Data[key]; found {
-		if existing.Tx != nil { // we sent a transaction in the last d blocks
+		if existing.Tx != nil { // we sent a transaction in the last d seconds
 			// new tx with lower gas -> discard tx
 			utils.Logger.Debug().Msgf("Found cache entry with key [%s], transaction data Tx [%s] and CachedTime [%d]",
 				key, existing.Tx.Hash().Hex(), existing.CachedTime)
@@ -65,7 +65,7 @@ func (c *Cache) UpdateEntry(newTx *types.Transaction, currentTime uint64) (bool,
 			return false, nil // false -> tx won't be sent
 		}
 
-		// tx sent within the last d blocks
+		// tx sent within the last d seconds
 		utils.Logger.Debug().Msgf("Found cache entry with nil value.")
 		utils.Logger.Debug().Msgf("Adding transaction with hash [%s] to the cache at key [%s]\n", newTx.Hash(), key)
 		txInfo := TransactionInfo{newTx, existing.CachedTime}
@@ -75,7 +75,7 @@ func (c *Cache) UpdateEntry(newTx *types.Transaction, currentTime uint64) (bool,
 		return false, nil // false -> tx won't be sent
 	}
 
-	// no tx sent in the last d blocks
+	// no tx sent in the last d seconds
 	utils.Logger.Debug().Msgf("Adding transaction with hash [%s] and time [%v] to the cache at key [%s] \n", newTx.Hash(), currentTime, key)
 	c.Data[key] = TransactionInfo{Tx: nil, CachedTime: currentTime}
 	utils.Logger.Debug().Msgf("Cache entry updated to: Tx = nil and CachedTime = [%d]", c.Data[key].CachedTime)

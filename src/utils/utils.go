@@ -3,14 +3,9 @@ package utils
 import (
 	"github.com/ethereum/go-ethereum/common"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
-	"log"
 	"math/big"
 	"os"
-	"path/filepath"
-	"runtime"
-	"testing"
 )
 
 func setUpLogger() zerolog.Logger {
@@ -23,23 +18,6 @@ func setUpLogger() zerolog.Logger {
 }
 
 var Logger = setUpLogger()
-
-func LoadEnv() {
-	_, b, _, _ := runtime.Caller(0)
-	basepath := filepath.Dir(b)
-	rootPath := filepath.Join(basepath, "..")
-
-	err := godotenv.Load(filepath.Join(rootPath, ".env"))
-	if err != nil {
-		log.Fatalf("Error loading .env file")
-	}
-}
-
-func CheckErr(t *testing.T, err error, message string) {
-	if err != nil {
-		t.Fatalf("%s: %v", message, err)
-	}
-}
 
 func SenderAddress(tx *txtypes.Transaction) (common.Address, error) {
 	signer := txtypes.NewLondonSigner(tx.ChainId())

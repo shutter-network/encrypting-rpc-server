@@ -2,15 +2,13 @@ package cache
 
 import (
 	"fmt"
+	"github.com/shutter-network/encrypting-rpc-server/testdata"
 	"math/big"
 	"sync"
 	"testing"
 
-	testdata "github.com/shutter-network/encrypting-rpc-server/test-data"
 	"github.com/stretchr/testify/assert"
 )
-
-// todo update to cover all cases
 
 func TestCache_Key(t *testing.T) {
 	privateKey, fromAddress, err := testdata.GenerateKeyPair()

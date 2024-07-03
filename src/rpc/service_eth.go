@@ -156,15 +156,17 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	}
 
 	if utils.IsCancellationTransaction(tx, fromAddress) {
-		utils.Logger.Info().Msg("Detected cancellation transaction, sending it right away...")
+		utils.Logger.Info().Msg("Detected cancellation transaction, forwarding to backend")
 
 		backendClient, err := rpc.Dial(service.Config.BackendURL.String())
 		if err != nil {
+			utils.Logger.Err(err).Msg("Failed to connect to backend")
 			return nil, &EncodingError{StatusCode: -32603, Err: err}
 		}
 
 		err = backendClient.CallContext(ctx, &txHash, "eth_sendRawTransaction", s)
 		if err != nil {
+			utils.Logger.Err(err).Msg("Failed to send cancel transaction to backend")
 			return nil, &EncodingError{StatusCode: -32602, Err: err}
 		}
 
