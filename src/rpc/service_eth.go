@@ -243,6 +243,5 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-
 	return submitTx, nil
 }

@@ -3,6 +3,7 @@ package test
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -26,13 +27,12 @@ import (
 )
 
 func init() {
-	TestKeygen = medleyKeygen.NewTestKeyGenerator(&testing.T{}, 3, 2, true)
-
-	TestEonKey = TestKeygen.EonPublicKey([]byte("test"))
+	TestKeygen, _ = medleyKeygen.NewEonKeys(rand.Reader, 3, 2)
+	TestEonKey = TestKeygen.EonPublicKey()
 }
 
 var (
-	TestKeygen      *medleyKeygen.TestKeyGenerator
+	TestKeygen      *medleyKeygen.EonKeys
 	TestEonKey      *shcrypto.EonPublicKey
 	DeployerKey     = "a26ebb1df46424945009db72c7a7ba034027450784b93f34000169b35fd3adaa"
 	DeployerAddress = "0xA868bC7c1AF08B8831795FAC946025557369F69C"
