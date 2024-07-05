@@ -31,7 +31,7 @@ type Config struct {
 
 type RPCService interface {
 	Name() string
-	NewTimeEvent(ctx context.Context, newTime uint64)
+	NewTimeEvent(ctx context.Context, newTime int64)
 	SendRawTransaction(ctx context.Context, s string) (*common.Hash, error)
 	Init(processor Processor, config Config)
 	SendTimeEvents(ctx context.Context, delayInSeconds int)

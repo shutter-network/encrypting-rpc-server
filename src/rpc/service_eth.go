@@ -48,7 +48,7 @@ type EthService struct {
 func (s *EthService) Init(processor Processor, config Config) {
 	s.Processor = processor
 	s.Config = config
-	s.Cache = cache.NewCache(uint64(config.DelayInSeconds))
+	s.Cache = cache.NewCache(int64(config.DelayInSeconds))
 }
 
 func (s *EthService) Name() string {
@@ -69,12 +69,12 @@ func (s *EthService) SendTimeEvents(ctx context.Context, delayInSeconds int) {
 			utils.Logger.Debug().Msgf("Received timer event | Unix time = [%d] | Time = [%v]",
 				newTime, time.Unix(newTime, 0))
 
-			s.NewTimeEvent(ctx, uint64(newTime))
+			s.NewTimeEvent(ctx, newTime)
 		}
 	}
 }
 
-func (s *EthService) NewTimeEvent(ctx context.Context, newTime uint64) {
+func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 	utils.Logger.Info().Msg(fmt.Sprintf("Received new time event: %d", newTime))
 	for key, info := range s.Cache.Data {
 		if info.CachedTime+s.Cache.DelayFactor <= newTime {
@@ -174,7 +174,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return &txHash, nil
 	}
 
-	updated, err := service.Cache.UpdateEntry(tx, uint64(time.Now().Unix()))
+	updated, err := service.Cache.UpdateEntry(tx, time.Now().Unix())
 	if err != nil {
 		utils.Logger.Err(err).Msg("Failed to update the cache.")
 		return nil, &EncodingError{StatusCode: -32603, Err: err}

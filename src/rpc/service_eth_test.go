@@ -97,7 +97,7 @@ func TestSendRawTransaction_Success(t *testing.T) {
 	cachedTxInfo, exists := service.Cache.Data[key]
 
 	assert.True(t, exists, "Expected transaction information to be in the cache")
-	assert.Equal(t, uint64(time.Now().Unix()), cachedTxInfo.CachedTime, "Expected sending block does not match")
+	assert.Equal(t, time.Now().Unix(), cachedTxInfo.CachedTime, "Expected sending block does not match")
 	assert.Nil(t, cachedTxInfo.Tx)
 }
 
@@ -155,7 +155,7 @@ func TestSendRawTransaction_SameNonce_SameGasPrice_Delayed(t *testing.T) {
 	// Transaction resending is delayed
 	cachedTxInfo, exists := service.Cache.Data[key]
 	assert.True(t, exists, "Expected transaction information to be in the cache")
-	assert.Equal(t, uint64(time.Now().Unix()), cachedTxInfo.CachedTime, "Expected sending block does not match")
+	assert.Equal(t, time.Now().Unix(), cachedTxInfo.CachedTime, "Expected sending block does not match")
 	assertDynamicTxEquality(t, cachedTxInfo.Tx, signedTx1)
 
 	// Only first transaction gets encrypted
@@ -187,7 +187,7 @@ func TestSendRawTransaction_SameNonce_HigherGasPrice_Delayed(t *testing.T) {
 	// Transaction with higher gas price is stored and delayed
 	cachedTxInfo, exists := service.Cache.Data[key]
 	assert.True(t, exists, "Expected transaction information to be in the cache")
-	assert.Equal(t, uint64(time.Now().Unix()), cachedTxInfo.CachedTime, "Expected sending block does not match")
+	assert.Equal(t, time.Now().Unix(), cachedTxInfo.CachedTime, "Expected sending block does not match")
 	assertDynamicTxEquality(t, cachedTxInfo.Tx, signedTx2)
 
 	// Only first transaction gets encrypted
@@ -196,7 +196,7 @@ func TestSendRawTransaction_SameNonce_HigherGasPrice_Delayed(t *testing.T) {
 
 func TestNewTimeEvent_UpdateTxInfo(t *testing.T) {
 	service := initTest(t)
-	currentTime := uint64(time.Now().Unix())
+	currentTime := time.Now().Unix()
 	chainID := big.NewInt(1)
 
 	_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, 1, chainID)
@@ -219,7 +219,7 @@ func TestNewTimeEvent_UpdateTxInfo(t *testing.T) {
 
 func TestNewTimeEvent_KeepTxInfo(t *testing.T) {
 	service := initTest(t)
-	currentTime := uint64(13)
+	currentTime := int64(13)
 	chainID := big.NewInt(1)
 
 	_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, 1, chainID)
@@ -229,20 +229,20 @@ func TestNewTimeEvent_KeepTxInfo(t *testing.T) {
 		t.Fatalf("Failed to create key: %v", err)
 	}
 
-	service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, CachedTime: uint64(4)}
+	service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, CachedTime: 4}
 
 	service.NewTimeEvent(context.Background(), currentTime)
 
 	info, exists := service.Cache.Data[key]
 
 	assert.True(t, exists, "Expected transaction information to be in the cache")
-	assert.Equal(t, info.CachedTime, uint64(4), "Expected cached time to remain unchanged")
+	assert.Equal(t, info.CachedTime, int64(4), "Expected cached time to remain unchanged")
 	assertDynamicTxEquality(t, info.Tx, signedTx)
 }
 
 func TestNewTimeEvent_DeleteTxInfo(t *testing.T) {
 	service := initTest(t)
-	currentTime := uint64(13)
+	currentTime := int64(13)
 	chainID := big.NewInt(1)
 
 	_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, 1, chainID)

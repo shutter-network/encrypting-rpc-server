@@ -9,16 +9,16 @@ import (
 
 type TransactionInfo struct {
 	Tx         *types.Transaction
-	CachedTime uint64
+	CachedTime int64
 }
 
 type Cache struct {
 	sync.RWMutex
 	Data        map[string]TransactionInfo
-	DelayFactor uint64
+	DelayFactor int64
 }
 
-func NewCache(delayFactor uint64) *Cache {
+func NewCache(delayFactor int64) *Cache {
 	return &Cache{
 		Data:        make(map[string]TransactionInfo),
 		DelayFactor: delayFactor,
@@ -34,7 +34,7 @@ func (c *Cache) Key(tx *types.Transaction) (string, error) {
 	return fmt.Sprintf("%s-%d", fromAddress.Hex(), tx.Nonce()), nil
 }
 
-func (c *Cache) UpdateEntry(newTx *types.Transaction, currentTime uint64) (bool, error) {
+func (c *Cache) UpdateEntry(newTx *types.Transaction, currentTime int64) (bool, error) {
 	key, err := c.Key(newTx)
 	if err != nil {
 		return false, err
