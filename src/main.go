@@ -79,14 +79,6 @@ func Cmd() *cobra.Command {
 	)
 
 	cmd.PersistentFlags().StringVarP(
-		&Config.WebsocketURL,
-		"websocket-url",
-		"",
-		"",
-		"address to forward requests to",
-	)
-
-	cmd.PersistentFlags().StringVarP(
 		&Config.KeyBroadcastContractAddress,
 		"key-broadcast-contract-address",
 		"",
