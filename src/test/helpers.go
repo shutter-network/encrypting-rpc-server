@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/server"
+	"github.com/shutter-network/encrypting-rpc-server/utils"
 	sequencerBindings "github.com/shutter-network/gnosh-contracts/gnoshcontracts/sequencer"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
@@ -186,12 +187,12 @@ func setupProcessor(ctx context.Context) rpc.Processor {
 
 func CaptureOutput(f func() error) (error, string) {
 	var buf bytes.Buffer
-	oldLogger := server.Logger
-	newLogger := server.Logger.Output(&buf)
+	oldLogger := utils.Logger
+	newLogger := utils.Logger.Output(&buf)
 	defer func() {
-		server.Logger = oldLogger
+		utils.Logger = oldLogger
 	}()
-	server.Logger = newLogger
+	utils.Logger = newLogger
 	err := f()
 	return err, buf.String()
 }
@@ -224,11 +225,11 @@ func SetupServer(ctx context.Context, t *testing.T) error {
 		log.Info().Msg("can not unmarshal rpcurl")
 		return err
 	}
-	config := server.Config{
+	config := rpc.Config{
 		BackendURL:        backendUrl,
 		HTTPListenAddress: processor.URL,
 	}
-	service := server.NewRPCService(processor, &config)
+	service := server.NewRPCService(processor, config)
 	go func() {
 		err := medleyService.Run(ctx, service)
 		if err != nil {

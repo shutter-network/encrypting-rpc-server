@@ -7,6 +7,7 @@ import (
 )
 
 func NewReverseProxy(target *url.URL) *httputil.ReverseProxy {
+
 	rewriteFunc := func(r *httputil.ProxyRequest) {
 		r.SetURL(target.URL)
 	}

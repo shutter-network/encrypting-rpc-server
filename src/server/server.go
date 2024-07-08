@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"io"
 	"net/http"
 	"time"
@@ -16,7 +17,6 @@ import (
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley"
-	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 )
 
@@ -39,21 +39,25 @@ func (p *JSONRPCProxy) SelectHandler(method string) http.Handler {
 
 func (p *JSONRPCProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
+
 	if err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
+
 	rpcreq := medley.RPCRequest{}
 	err = json.Unmarshal(body, &rpcreq)
 	if err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
+
 	selectedHandler := p.SelectHandler(rpcreq.Method)
+
 	if selectedHandler == p.processor {
-		Logger.Info().Str("method", rpcreq.Method).Msg("dispatching to processor")
+		utils.Logger.Info().Str("method", rpcreq.Method).Msg("dispatching to processor")
 	} else {
-		Logger.Info().Str("method", rpcreq.Method).Msg("dispatching to backend")
+		utils.Logger.Info().Str("method", rpcreq.Method).Msg("dispatching to backend")
 	}
 
 	// make the body available again before letting reverse proxy handle the rest
@@ -61,31 +65,27 @@ func (p *JSONRPCProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	selectedHandler.ServeHTTP(w, r)
 }
 
-type Config struct {
-	BackendURL        *url.URL
-	HTTPListenAddress string
-}
-
 type server struct {
 	processor rpc.Processor
-	config    *Config
+	config    rpc.Config
 }
 
-func NewRPCService(processor rpc.Processor, config *Config) medleyService.Service {
+func NewRPCService(processor rpc.Processor, config rpc.Config) medleyService.Service {
 	return &server{
 		processor: processor,
 		config:    config,
 	}
 }
 
-func (srv *server) rpcHandler() (http.Handler, error) {
+func (srv *server) rpcHandler(ctx context.Context) (http.Handler, error) {
 	rpcServices := []rpc.RPCService{
 		&rpc.EthService{},
 	}
 
 	rpcServer := ethrpc.NewServer()
 	for _, service := range rpcServices {
-		service.InjectProcessor(srv.processor)
+		service.Init(srv.processor, srv.config)
+		go service.SendTimeEvents(ctx, srv.config.DelayInSeconds)
 		err := rpcServer.RegisterName(service.Name(), service)
 		if err != nil {
 			return nil, errors.Wrap(err, "error while trying to register RPCService")
@@ -99,11 +99,11 @@ func (srv *server) rpcHandler() (http.Handler, error) {
 	return p, nil
 }
 
-func (srv *server) setupRouter() (*chi.Mux, error) {
+func (srv *server) setupRouter(ctx context.Context) (*chi.Mux, error) {
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
-	handler, err := srv.rpcHandler()
+	handler, err := srv.rpcHandler(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,8 @@ func (srv *server) setupRouter() (*chi.Mux, error) {
 }
 
 func (srv *server) Start(ctx context.Context, runner medleyService.Runner) error {
-	handler, err := srv.setupRouter()
+	handler, err := srv.setupRouter(ctx)
+
 	if err != nil {
 		return err
 	}

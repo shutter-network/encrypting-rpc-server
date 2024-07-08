@@ -5,12 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/shutter-network/encrypting-rpc-server/test"
 	"math"
 	"math/big"
 	"strings"
 	"testing"
-
-	"github.com/shutter-network/encrypting-rpc-server/test"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
