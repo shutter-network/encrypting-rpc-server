@@ -29,7 +29,6 @@ var Config struct {
 	SigningKey                  string `mapstructure:"signing-key"`
 	KeyperSetChangeLookAhead    int    `mapstructure:"keyper-set-change-look-ahead"`
 	RPCUrl                      string `mapstructure:"rpc-url"`
-	WebsocketURL                string `mapstructure:"websocket-url"`
 	HTTPListenAddress           string `mapstructure:"http-listen-address"`
 	KeyBroadcastContractAddress string `mapstructure:"key-broadcast-contract-address"`
 	SequencerAddress            string `mapstructure:"sequencer-address"`
