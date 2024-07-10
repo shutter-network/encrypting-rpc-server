@@ -13,6 +13,7 @@ services:
       --sequencer-address ${SEQUENCER_CONTRACT_ADDRESS}
       --keyper-set-manager-address ${KEYPER_SET_MANAGER_CONTRACT_ADDRESS}
       --rpc-url ${UPSTREAM_RPC}
+      --delay-in-seconds ${DELAY_IN_SECONDS}
     labels:
       caddy: "${SERVICE_DOMAIN_NAME}"
       caddy.reverse_proxy: "{{ upstreams 8546 }}"
