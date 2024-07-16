@@ -32,6 +32,7 @@ func MockConfig() rpc.Config {
 		BackendURL:        &url.URL{},
 		HTTPListenAddress: ":8546",
 		DelayInSeconds:    10,
+		ChainGasLimit:     100000,
 	}
 }
 

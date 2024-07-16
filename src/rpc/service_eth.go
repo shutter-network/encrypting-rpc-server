@@ -155,6 +155,10 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("gas cost is higher")}
 	}
 
+	if tx.Gas() > service.Config.ChainGasLimit {
+		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("gas limit is higher than allowed chain limit")}
+	}
+
 	if utils.IsCancellationTransaction(tx, fromAddress) {
 		utils.Logger.Info().Msg("Detected cancellation transaction, forwarding to backend")
 
