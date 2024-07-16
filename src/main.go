@@ -189,7 +189,7 @@ func Start() error {
 		BackendURL:        backendURL,
 		HTTPListenAddress: Config.HTTPListenAddress,
 		DelayInSeconds:    Config.DelayInSeconds,
-		ChainGasLimit:     uint64(Config.ChainGasLimit),
+		ChainGasLimit:     Config.ChainGasLimit,
 	}
 
 	service := server.NewRPCService(processor, config)
