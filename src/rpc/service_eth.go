@@ -156,7 +156,8 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	}
 
 	if tx.Gas() > service.Config.EncryptedGasLimit {
-		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("gas limit is higher than encrypted gas limit")}
+		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("gas limit exceeds encrypted gas limit " +
+			"(max gas limit allowed per shutterized block)")}
 	}
 
 	if utils.IsCancellationTransaction(tx, fromAddress) {
