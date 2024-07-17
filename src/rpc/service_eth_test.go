@@ -263,7 +263,7 @@ func TestNewTimeEvent_DeleteTxInfo(t *testing.T) {
 
 func TestSendRawTransaction_GasLimitExceedsChainLimit_Error(t *testing.T) {
 	service := initTest(t)
-	highGasLimit := service.Config.ChainGasLimit + 1
+	highGasLimit := service.Config.EncryptedGasLimit + 1
 	nonce := uint64(1)
 	chainID := big.NewInt(1)
 
