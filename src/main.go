@@ -34,6 +34,7 @@ var Config struct {
 	SequencerAddress            string `mapstructure:"sequencer-address"`
 	KeyperSetManagerAddress     string `mapstructure:"keyperset-manager-address"`
 	DelayInSeconds              int    `mapstructure:"delay-in-seconds"`
+	EncryptedGasLimit           uint64 `mapstructure:"encrypted-gas-limit"`
 }
 
 func Cmd() *cobra.Command {
@@ -106,7 +107,15 @@ func Cmd() *cobra.Command {
 		"delay-in-seconds",
 		"",
 		10,
-		"Server cache delay in seconds",
+		"server cache delay in seconds",
+	)
+
+	cmd.PersistentFlags().Uint64VarP(
+		&Config.EncryptedGasLimit,
+		"encrypted-gas-limit",
+		"",
+		1000000,
+		"encrypted gas limit",
 	)
 
 	return cmd
@@ -180,6 +189,7 @@ func Start() error {
 		BackendURL:        backendURL,
 		HTTPListenAddress: Config.HTTPListenAddress,
 		DelayInSeconds:    Config.DelayInSeconds,
+		EncryptedGasLimit: Config.EncryptedGasLimit,
 	}
 
 	service := server.NewRPCService(processor, config)

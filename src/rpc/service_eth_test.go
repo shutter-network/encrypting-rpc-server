@@ -121,7 +121,7 @@ func TestSendRawTransaction_TransactionInvalid_GasCost_Higher(t *testing.T) {
 	service := initTest(t)
 
 	highCost := new(big.Int).Mul(big.NewInt(10), big.NewInt(1e18))
-	rawTx, _, err := testdata.TxWithGas(service.Processor.SigningKey, 1, big.NewInt(1), highCost)
+	rawTx, _, err := testdata.TxWithGasPrice(service.Processor.SigningKey, 1, big.NewInt(1), highCost)
 	assert.NoError(t, err, "Failed to create signed transaction")
 
 	_, err = service.SendRawTransaction(context.Background(), rawTx)
@@ -175,7 +175,7 @@ func TestSendRawTransaction_SameNonce_HigherGasPrice_Delayed(t *testing.T) {
 
 	// Send the second transaction
 	twiceGasPrice := new(big.Int).Mul(signedTx1.GasPrice(), big.NewInt(2))
-	rawTx2, signedTx2, _ := testdata.TxWithGas(service.Processor.SigningKey, nonce, chainID, twiceGasPrice)
+	rawTx2, signedTx2, _ := testdata.TxWithGasPrice(service.Processor.SigningKey, nonce, chainID, twiceGasPrice)
 
 	_, err = service.SendRawTransaction(context.Background(), rawTx2)
 	assert.NoError(t, err, "Expected transaction sending to succeed")
@@ -259,4 +259,24 @@ func TestNewTimeEvent_DeleteTxInfo(t *testing.T) {
 	_, exists := service.Cache.Data[key]
 
 	assert.False(t, exists, "Expected transaction information to be deleted from the cache")
+}
+
+func TestSendRawTransaction_GasLimitExceedsChainLimit_Error(t *testing.T) {
+	service := initTest(t)
+	highGasLimit := service.Config.EncryptedGasLimit + 1
+	nonce := uint64(1)
+	chainID := big.NewInt(1)
+
+	rawTx, _, err := testdata.TxWithGas(service.Processor.SigningKey, nonce, chainID, big.NewInt(2000000000), highGasLimit)
+	assert.NoError(t, err, "Failed to create signed transaction")
+
+	// Send the transaction
+	_, err = service.SendRawTransaction(context.Background(), rawTx)
+	// Expect an error here because gas limit exceeds the chain limit
+	assert.Error(t, err, "Expected the SendRawTransaction function to return an error")
+
+	encodingErr, ok := err.(*rpc.EncodingError)
+	assert.True(t, ok, "Expected error of type *EncodingError")
+	assert.Equal(t, encodingErr.StatusCode, -32000, "Expected specific status code for gas limit error")
+	assert.Equal(t, encodingErr.Err.Error(), "gas limit is higher than allowed chain limit")
 }

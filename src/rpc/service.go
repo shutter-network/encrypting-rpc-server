@@ -27,6 +27,7 @@ type Config struct {
 	BackendURL        *url.URL
 	HTTPListenAddress string
 	DelayInSeconds    int
+	EncryptedGasLimit uint64
 }
 
 type RPCService interface {
