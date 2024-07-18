@@ -78,9 +78,6 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 	utils.Logger.Info().Msg(fmt.Sprintf("Received new time event: %d", newTime))
 	for key, info := range s.Cache.Data {
 		if info.CachedTime+s.Cache.DelayFactor <= newTime {
-			utils.Logger.Debug().Msgf("Deleting entry at key [%s]", key)
-			delete(s.Cache.Data, key)
-
 			if info.Tx != nil {
 				utils.Logger.Debug().Msgf("Sending transaction [%s]", info.Tx.Hash().Hex())
 				rawTxBytes, err := info.Tx.MarshalBinary()
@@ -93,10 +90,20 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 
 				if err != nil {
 					utils.Logger.Error().Err(err).Msgf("Failed to send transaction.")
+					if s.CheckNonceUsed(key, ctx) {
+						utils.Logger.Debug().Msgf("Deleting entry at key [%s]", key)
+						delete(s.Cache.Data, key)
+					}
 					continue
 				}
 
 				utils.Logger.Info().Msg("Transaction sent internally: " + txHash.Hex())
+
+				txInfo := cache.TransactionInfo{info.Tx, newTime}
+				s.Cache.Data[key] = txInfo
+				utils.Logger.Debug().Msgf("Cache entry updated to: Tx = [%s] and CachedTime = [%d]",
+					s.Cache.Data[key].Tx.Hash().Hex(), s.Cache.Data[key].CachedTime)
+
 			}
 		}
 	}

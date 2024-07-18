@@ -50,7 +50,7 @@ func TestCache_UpdateEntry(t *testing.T) {
 	// Verify that the transaction in the cache matches the signed transaction
 	cachedTxInfo, exists := c.Data[key]
 	assert.True(t, exists, "Expected transaction to be in the cache")
-	assert.Nil(t, cachedTxInfo.Tx, "Expected cached transaction to be nil")
+	assert.Equal(t, cachedTxInfo.Tx, signedTx)
 }
 
 func TestCacheConcurrentUpdateEntry(t *testing.T) {

@@ -98,7 +98,7 @@ func TestSendRawTransaction_Success(t *testing.T) {
 
 	assert.True(t, exists, "Expected transaction information to be in the cache")
 	assert.Equal(t, time.Now().Unix(), cachedTxInfo.CachedTime, "Expected sending block does not match")
-	assert.Nil(t, cachedTxInfo.Tx)
+	assertDynamicTxEquality(t, signedTx, cachedTxInfo.Tx)
 }
 
 func TestSendRawTransaction_TransactionInvalidNonce_NotSent(t *testing.T) {
@@ -214,10 +214,10 @@ func TestNewTimeEvent_UpdateTxInfo(t *testing.T) {
 
 	assert.True(t, exists, "Expected transaction information to be in the cache")
 	assert.Equal(t, currentTime, info.CachedTime, "Expected cached time to be updated")
-	assert.Nil(t, info.Tx)
+	assert.Equal(t, signedTx, info.Tx)
 }
 
-func TestNewTimeEvent_KeepTxInfo(t *testing.T) {
+func TestNewTimeEvent_KeepTxInfoAndTime(t *testing.T) {
 	service := initTest(t)
 	currentTime := int64(13)
 	chainID := big.NewInt(1)
@@ -240,7 +240,7 @@ func TestNewTimeEvent_KeepTxInfo(t *testing.T) {
 	assertDynamicTxEquality(t, info.Tx, signedTx)
 }
 
-func TestNewTimeEvent_DeleteTxInfo(t *testing.T) {
+func TestNewTimeEvent_KeepTxInfoUpdateTime(t *testing.T) {
 	service := initTest(t)
 	currentTime := int64(13)
 	chainID := big.NewInt(1)
@@ -252,7 +252,29 @@ func TestNewTimeEvent_DeleteTxInfo(t *testing.T) {
 		t.Fatalf("Failed to create key: %v", err)
 	}
 
-	service.Cache.Data[key] = cache.TransactionInfo{Tx: nil, CachedTime: 3}
+	service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, CachedTime: 3}
+
+	service.NewTimeEvent(context.Background(), currentTime)
+
+	info, exists := service.Cache.Data[key]
+	assert.True(t, exists, "Expected transaction information to be in the cache")
+	assert.Equal(t, currentTime, info.CachedTime, "Expected cached time to be updated")
+	assertDynamicTxEquality(t, info.Tx, signedTx)
+}
+
+func TestNewTimeEvent_DeleteTxInfo(t *testing.T) {
+	service := initTest(t)
+	currentTime := int64(13)
+	chainID := big.NewInt(1)
+
+	_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, 0, chainID)
+
+	key, err := service.Cache.Key(signedTx)
+	if err != nil {
+		t.Fatalf("Failed to create key: %v", err)
+	}
+
+	service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, CachedTime: 3}
 
 	service.NewTimeEvent(context.Background(), currentTime)
 
@@ -261,7 +283,7 @@ func TestNewTimeEvent_DeleteTxInfo(t *testing.T) {
 	assert.False(t, exists, "Expected transaction information to be deleted from the cache")
 }
 
-func TestSendRawTransaction_GasLimitExceedsChainLimit_Error(t *testing.T) {
+func TestSendRawTransaction_GasLimitExceedsEncryptedLimit_Error(t *testing.T) {
 	service := initTest(t)
 	highGasLimit := service.Config.EncryptedGasLimit + 1
 	nonce := uint64(1)
@@ -277,6 +299,7 @@ func TestSendRawTransaction_GasLimitExceedsChainLimit_Error(t *testing.T) {
 
 	encodingErr, ok := err.(*rpc.EncodingError)
 	assert.True(t, ok, "Expected error of type *EncodingError")
-	assert.Equal(t, encodingErr.StatusCode, -32000, "Expected specific status code for gas limit error")
-	assert.Equal(t, encodingErr.Err.Error(), "gas limit is higher than allowed chain limit")
+	assert.Equal(t, encodingErr.StatusCode, -32000, "Expected status code for gas limit error")
+	assert.Equal(t, encodingErr.Err.Error(), "gas limit exceeds encrypted gas limit "+
+		"(max gas limit allowed per shutterized block)")
 }
