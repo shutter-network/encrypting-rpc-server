@@ -98,11 +98,6 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 				}
 
 				utils.Logger.Info().Msg("Transaction sent internally: " + txHash.Hex())
-
-				txInfo := cache.TransactionInfo{Tx: info.Tx, CachedTime: newTime}
-				s.Cache.Data[key] = txInfo
-				utils.Logger.Debug().Msgf("Cache entry updated to: Tx = [%s] and CachedTime = [%d]",
-					s.Cache.Data[key].Tx.Hash().Hex(), s.Cache.Data[key].CachedTime)
 			}
 		}
 	}

@@ -83,6 +83,7 @@ func (c *Cache) UpdateEntry(newTx *types.Transaction, currentTime int64) (bool, 
 	// first transaction
 	utils.Logger.Debug().Msgf("Adding transaction with hash [%s] and time [%v] to the cache at key [%s] \n", newTx.Hash(), currentTime, key)
 	c.Data[key] = TransactionInfo{Tx: newTx, CachedTime: currentTime}
-	utils.Logger.Debug().Msgf("Cache entry updated to: Tx = nil and CachedTime = [%d]", c.Data[key].CachedTime)
+	utils.Logger.Debug().Msgf("Cache entry updated to: Tx = [%s] and CachedTime = [%d]",
+		c.Data[key].Tx.Hash().Hex(), c.Data[key].CachedTime)
 	return true, nil // true -> send tx
 }

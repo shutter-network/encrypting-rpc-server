@@ -214,7 +214,7 @@ func TestNewTimeEvent_UpdateTxInfo(t *testing.T) {
 
 	assert.True(t, exists, "Expected transaction information to be in the cache")
 	assert.Equal(t, currentTime, info.CachedTime, "Expected cached time to be updated")
-	assert.Equal(t, signedTx, info.Tx)
+	assertDynamicTxEquality(t, signedTx, info.Tx)
 }
 
 func TestNewTimeEvent_KeepTxInfoAndTime(t *testing.T) {
@@ -242,7 +242,7 @@ func TestNewTimeEvent_KeepTxInfoAndTime(t *testing.T) {
 
 func TestNewTimeEvent_KeepTxInfoUpdateTime(t *testing.T) {
 	service := initTest(t)
-	currentTime := int64(13)
+	currentTime := time.Now().Unix()
 	chainID := big.NewInt(1)
 
 	_, signedTx, _ := testdata.Tx(service.Processor.SigningKey, 1, chainID)
