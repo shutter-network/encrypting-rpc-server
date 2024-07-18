@@ -70,13 +70,21 @@ func (c *Cache) UpdateEntry(newTx *types.Transaction, currentTime int64) (bool, 
 			utils.Logger.Debug().Msgf("Found cache entry with key [%s], transaction data Tx [%s] and CachedTime [%d]. Resending.",
 				key, existing.Tx.Hash().Hex(), existing.CachedTime)
 
-			utils.Logger.Debug().Msgf("Adding transaction with hash [%s] to the cache at key [%s]\n", newTx.Hash(), key)
-			txInfo := TransactionInfo{newTx, currentTime}
-			c.Data[key] = txInfo
-			utils.Logger.Debug().Msgf("Cache entry updated to: Tx = [%s] and CachedTime = [%d]",
-				c.Data[key].Tx.Hash().Hex(), c.Data[key].CachedTime)
-			return true, nil // true -> tx will be sent
-
+			if newTx.GasPrice().Cmp(existing.Tx.GasPrice()) <= 0 { // previous tx with higher gas price
+				utils.Logger.Debug().Msgf("Keeping transaction with hash [%s] in the cache at key [%s]\n", newTx.Hash(), key)
+				txInfo := TransactionInfo{existing.Tx, currentTime}
+				c.Data[key] = txInfo
+				utils.Logger.Debug().Msgf("Cache entry updated to: Tx = [%s] and CachedTime = [%d]",
+					c.Data[key].Tx.Hash().Hex(), c.Data[key].CachedTime)
+				return true, nil // true -> tx will be sent
+			} else {
+				utils.Logger.Debug().Msgf("Adding transaction with hash [%s] to the cache at key [%s]\n", newTx.Hash(), key)
+				txInfo := TransactionInfo{newTx, currentTime}
+				c.Data[key] = txInfo
+				utils.Logger.Debug().Msgf("Cache entry updated to: Tx = [%s] and CachedTime = [%d]",
+					c.Data[key].Tx.Hash().Hex(), c.Data[key].CachedTime)
+				return true, nil // true -> tx will be sent
+			}
 		}
 	}
 
