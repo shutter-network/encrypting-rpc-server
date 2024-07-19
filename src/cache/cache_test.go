@@ -28,7 +28,7 @@ func TestCache_Key(t *testing.T) {
 	assert.Equal(t, expectedKey, key, "Expected key does not match")
 }
 
-func TestCache_UpdateEntry(t *testing.T) {
+func TestCache_ProcessTxEntry(t *testing.T) {
 	c := NewCache(10)
 
 	privateKey, fromAddress, err := testdata.GenerateKeyPair()
@@ -37,9 +37,9 @@ func TestCache_UpdateEntry(t *testing.T) {
 	_, signedTx, err := testdata.Tx(privateKey, 1, big.NewInt(1))
 	assert.NoError(t, err, "Failed to create signed transaction")
 
-	updated, err := c.UpdateEntry(signedTx, 100)
+	sendStatus, err := c.ProcessTxEntry(signedTx, 100)
 	assert.NoError(t, err, "Failed to update entry")
-	assert.True(t, updated, "Expected transaction to be added to cache")
+	assert.True(t, sendStatus, "Expected transaction send status to be true")
 
 	key, err := c.Key(signedTx)
 	assert.NoError(t, err, "Failed to get key from cache")
@@ -70,7 +70,7 @@ func TestCacheConcurrentUpdateEntry(t *testing.T) {
 		_, newTx, err := testdata.Tx(privateKey, nonce, chainID)
 		assert.Nil(t, err, "Error while creating transaction")
 		currentBlock := int64(1)
-		executed, err := c.UpdateEntry(newTx, currentBlock)
+		executed, err := c.ProcessTxEntry(newTx, currentBlock)
 		assert.Nil(t, err)
 		assert.True(t, executed)
 	}()
@@ -80,7 +80,7 @@ func TestCacheConcurrentUpdateEntry(t *testing.T) {
 		_, newTx, err := testdata.Tx(privateKey, nonce+1, chainID)
 		assert.Nil(t, err, "Error while creating transaction")
 		currentBlock := int64(2)
-		executed, err := c.UpdateEntry(newTx, currentBlock)
+		executed, err := c.ProcessTxEntry(newTx, currentBlock)
 		assert.Nil(t, err)
 		assert.True(t, executed)
 	}()

@@ -180,13 +180,13 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return &txHash, nil
 	}
 
-	updated, err := service.Cache.UpdateEntry(tx, time.Now().Unix())
+	sendStatus, err := service.Cache.ProcessTxEntry(tx, time.Now().Unix())
 	if err != nil {
 		utils.Logger.Err(err).Msg("Failed to update the cache.")
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
 
-	if !updated {
+	if !sendStatus {
 		utils.Logger.Info().Hex("Tx hash", txHash.Bytes()).Msg("Transaction delayed")
 		return &txHash, nil
 	}
