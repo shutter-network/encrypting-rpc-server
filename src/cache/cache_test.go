@@ -28,6 +28,28 @@ func TestCache_Key(t *testing.T) {
 	assert.Equal(t, expectedKey, key, "Expected key does not match")
 }
 
+func TestCache_UpdateEntry(t *testing.T) {
+	privateKey, _, err := testdata.GenerateKeyPair()
+	assert.NoError(t, err, "Failed to generate key pair")
+
+	chainID := big.NewInt(1)
+	nonce := uint64(1)
+	_, signedTx, err := testdata.Tx(privateKey, nonce, chainID)
+	assert.NoError(t, err, "Failed to create signed transaction")
+
+	c := NewCache(10)
+
+	key := "testKey"
+	cachedTime := int64(1234)
+
+	c.UpdateEntry(key, signedTx, cachedTime)
+
+	entry, exists := c.Data[key]
+	assert.True(t, exists, "Key should exist in cache after UpdateEntry")
+	assert.Equal(t, signedTx, entry.Tx, "Transaction should match the updated one")
+	assert.Equal(t, cachedTime, entry.CachedTime, "CachedTime should match the updated one")
+}
+
 func TestCache_ProcessTxEntry(t *testing.T) {
 	c := NewCache(10)
 
