@@ -57,14 +57,14 @@ func (c *Cache) ProcessTxEntry(newTx *types.Transaction, currentTime int64) (boo
 			utils.Logger.Debug().Msgf("Found cache entry with key [%s], transaction data Tx [%s] and CachedTime [%d]",
 				key, existing.Tx.Hash().Hex(), existing.CachedTime)
 			if newTx.GasPrice().Cmp(existing.Tx.GasPrice()) <= 0 {
-				utils.Logger.Debug().Msgf("A transaction already exists with a higher gas price. "+
-					"Delaying transaction sending to [%d].", currentTime)
+				utils.Logger.Debug().Msgf("A transaction already exists with a higher gas price. " +
+					"Delaying transaction sending.")
 				return false, nil // false -> tx won't be sent
 			}
 
 			// new tx with higher gas -> update tx
-			utils.Logger.Debug().Msgf("A transaction already exists with a lower gas price. "+
-				"Updating transaction and delaying transaction sending to [%d].", currentTime)
+			utils.Logger.Debug().Msgf("A transaction already exists with a lower gas price. " +
+				"Updating transaction and delaying transaction sending.")
 			c.UpdateEntry(key, newTx, existing.CachedTime)
 			return false, nil // false -> tx won't be sent
 		}

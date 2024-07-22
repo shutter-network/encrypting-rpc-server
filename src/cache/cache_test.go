@@ -61,7 +61,7 @@ func TestCache_ProcessTxEntry(t *testing.T) {
 
 	sendStatus, err := c.ProcessTxEntry(signedTx, 100)
 	assert.NoError(t, err, "Failed to update entry")
-	assert.True(t, sendStatus, "Expected transaction to be added to cache")
+	assert.True(t, sendStatus, "Expected transaction send status to be true")
 
 	key, err := c.Key(signedTx)
 	assert.NoError(t, err, "Failed to get key from cache")
@@ -72,7 +72,7 @@ func TestCache_ProcessTxEntry(t *testing.T) {
 	// Verify that the transaction in the cache matches the signed transaction
 	cachedTxInfo, exists := c.Data[key]
 	assert.True(t, exists, "Expected transaction to be in the cache")
-	assert.Equal(t, signedTx, cachedTxInfo.Tx, "Expected cached transaction to be nil")
+	assert.Equal(t, signedTx, cachedTxInfo.Tx, "Cached transaction should match the updated one")
 }
 
 func TestCache_ConcurrentUpdateEntry(t *testing.T) {
