@@ -98,7 +98,7 @@ func TestSendRawTransaction_Success(t *testing.T) {
 
 	assert.True(t, exists, "Expected transaction information to be in the cache")
 	assert.Equal(t, time.Now().Unix(), cachedTxInfo.CachedTime, "Expected sending block does not match")
-	assert.Nil(t, cachedTxInfo.Tx)
+	assertDynamicTxEquality(t, signedTx, cachedTxInfo.Tx)
 }
 
 func TestSendRawTransaction_TransactionInvalidNonce_NotSent(t *testing.T) {
@@ -214,7 +214,7 @@ func TestNewTimeEvent_UpdateTxInfo(t *testing.T) {
 
 	assert.True(t, exists, "Expected transaction information to be in the cache")
 	assert.Equal(t, currentTime, info.CachedTime, "Expected cached time to be updated")
-	assert.Nil(t, info.Tx)
+	assertDynamicTxEquality(t, signedTx, info.Tx)
 }
 
 func TestNewTimeEvent_KeepTxInfo(t *testing.T) {
@@ -278,5 +278,5 @@ func TestSendRawTransaction_GasLimitExceedsChainLimit_Error(t *testing.T) {
 	encodingErr, ok := err.(*rpc.EncodingError)
 	assert.True(t, ok, "Expected error of type *EncodingError")
 	assert.Equal(t, encodingErr.StatusCode, -32000, "Expected specific status code for gas limit error")
-	assert.Equal(t, encodingErr.Err.Error(), "gas limit is higher than allowed chain limit")
+	assert.Equal(t, encodingErr.Err.Error(), "gas limit exceeds encrypted gas limit (max gas limit allowed per shutterized block)")
 }
