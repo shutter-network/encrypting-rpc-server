@@ -16,6 +16,7 @@ import (
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 	"math/big"
+	"strconv"
 	"time"
 )
 
@@ -161,7 +162,8 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	}
 
 	if tx.Gas() < intrinsicGas {
-		return nil, &EncodingError{StatusCode: -32602, Err: errors.New("gas limit below intrinsic gas limit")}
+		return nil, &EncodingError{StatusCode: -32602, Err: errors.New("gas limit below the intrinsic gas limit " +
+			"" + strconv.FormatUint(intrinsicGas, 10))}
 	}
 
 	if tx.Gas() > service.Config.EncryptedGasLimit {
