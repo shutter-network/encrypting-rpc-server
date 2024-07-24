@@ -155,6 +155,15 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("gas cost is higher")}
 	}
 
+	intrinsicGas, err := CalculateIntrinsicGas(tx)
+	if err != nil {
+		return nil, &EncodingError{StatusCode: -32602, Err: errors.New("error calculating the intrinsic gas: " + err.Error())}
+	}
+
+	if tx.Gas() < intrinsicGas {
+		return nil, &EncodingError{StatusCode: -32602, Err: errors.New("gas limit below intrinsic gas limit")}
+	}
+
 	if tx.Gas() > service.Config.EncryptedGasLimit {
 		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("gas limit exceeds encrypted gas limit " +
 			"(max gas limit allowed per shutterized block)")}

@@ -280,3 +280,23 @@ func TestSendRawTransaction_GasLimitExceedsChainLimit_Error(t *testing.T) {
 	assert.Equal(t, encodingErr.StatusCode, -32000, "Expected specific status code for gas limit error")
 	assert.Equal(t, encodingErr.Err.Error(), "gas limit exceeds encrypted gas limit (max gas limit allowed per shutterized block)")
 }
+
+func TestSendRawTransaction_IntrinsicGas_Error(t *testing.T) {
+	service := initTest(t)
+	gasLimit := uint64(20000)
+	nonce := uint64(1)
+	chainID := big.NewInt(1)
+
+	rawTx, _, err := testdata.TxWithGas(service.Processor.SigningKey, nonce, chainID, big.NewInt(2000000000), gasLimit)
+	assert.NoError(t, err, "Failed to create signed transaction")
+
+	// Send the transaction
+	_, err = service.SendRawTransaction(context.Background(), rawTx)
+	// Expect an error here because gas limit exceeds the chain limit
+	assert.Error(t, err, "Expected the SendRawTransaction function to return an error")
+
+	encodingErr, ok := err.(*rpc.EncodingError)
+	assert.True(t, ok, "Expected error of type *EncodingError")
+	assert.Equal(t, encodingErr.StatusCode, -32602, "Expected specific status code for gas limit error")
+	assert.Equal(t, encodingErr.Err.Error(), "gas limit below intrinsic gas limit")
+}
