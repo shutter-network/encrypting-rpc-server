@@ -22,6 +22,6 @@ clean:
 
 lint-changes:
 	base=`git merge-base HEAD origin/main`; \
-	golangci-lint run --new-from-rev $${base}
+	golangci-lint run --new-from-rev $${base} --timeout 5m
 
 .PHONY: build clean compile-contracts deploy lint-changes
