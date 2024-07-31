@@ -2,13 +2,17 @@ package main
 
 import (
 	"context"
-	"github.com/rs/zerolog/log"
-	"github.com/shutter-network/encrypting-rpc-server/utils"
-	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
-	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/rs/zerolog/log"
+	"github.com/shutter-network/encrypting-rpc-server/metrics"
+	"github.com/shutter-network/encrypting-rpc-server/utils"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/metricsserver"
+	metrics_server "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/metricsserver"
+	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 
 	"crypto/ecdsa"
 
@@ -35,6 +39,7 @@ var Config struct {
 	KeyperSetManagerAddress     string `mapstructure:"keyperset-manager-address"`
 	DelayInSeconds              int    `mapstructure:"delay-in-seconds"`
 	EncryptedGasLimit           uint64 `mapstructure:"encrypted-gas-limit"`
+	MetricsConfig               metrics_server.MetricsConfig
 }
 
 func Cmd() *cobra.Command {
@@ -118,6 +123,30 @@ func Cmd() *cobra.Command {
 		"encrypted gas limit",
 	)
 
+	cmd.PersistentFlags().BoolVarP(
+		&Config.MetricsConfig.Enabled,
+		"metrics_enabled",
+		"",
+		false,
+		"to enable promnetheus metrics",
+	)
+
+	cmd.PersistentFlags().StringVarP(
+		&Config.MetricsConfig.Host,
+		"metrics_host",
+		"",
+		"",
+		"metrics host",
+	)
+
+	cmd.PersistentFlags().Uint16VarP(
+		&Config.MetricsConfig.Port,
+		"metrics_port",
+		"",
+		3000,
+		"metrics port",
+	)
+
 	return cmd
 }
 
@@ -183,6 +212,11 @@ func Start() error {
 	err = backendURL.UnmarshalText([]byte(Config.RPCUrl))
 	if err != nil {
 		utils.Logger.Fatal().Err(err).Msg("failed to parse RPCUrl")
+	}
+
+	if Config.MetricsConfig.Enabled {
+		metrics.InitMetrics()
+		processor.MetricsServer = metricsserver.New(&Config.MetricsConfig)
 	}
 
 	config := rpc.Config{

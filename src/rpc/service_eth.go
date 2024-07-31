@@ -6,18 +6,20 @@ import (
 	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
+	"strconv"
+	"time"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/cache"
+	"github.com/shutter-network/encrypting-rpc-server/metrics"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
-	"math/big"
-	"strconv"
-	"time"
 )
 
 var (
@@ -113,6 +115,7 @@ func (service *EthService) SendTransaction(ctx context.Context, tx *txtypes.Tran
 }
 
 func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*common.Hash, error) {
+	timeBefore := time.Now()
 	if service.ProcessTransaction == nil {
 		service.ProcessTransaction = DefaultProcessTransaction
 	}
@@ -207,6 +210,8 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	}
 	utils.Logger.Info().Hex("Incoming tx hash", txHash.Bytes()).Hex("Encrypted tx hash", submitTx.Hash().Bytes()).Msg("Transaction sent")
 
+	metrics.MetricsRequestedGasLimit.WithLabelValues(txHash.String()).Observe(float64(tx.Gas()))
+	metrics.MetricsTotalRequestDuration.WithLabelValues(txHash.String()).Observe(float64(time.Since(timeBefore)))
 	return &txHash, nil
 }
 
@@ -241,12 +246,16 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
 
+	timeBefore := time.Now()
+
 	identityPrefix, err := shcrypto.RandomSigma(cryptorand.Reader)
 	if err != nil {
 		return nil, &EncodingError{StatusCode: -32602, Err: err}
 	}
 	identity := ComputeIdentity(identityPrefix[:], newSigner.From)
 	encryptedTx := shcrypto.Encrypt(b, eonKey, identity, sigma)
+
+	metrics.MetricsEncryptionDuration.WithLabelValues(tx.Hash().String()).Observe(float64(time.Since(timeBefore).Seconds()))
 
 	opts := bind.TransactOpts{
 		From:   *service.Processor.SigningAddress,
