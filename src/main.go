@@ -2,13 +2,15 @@ package main
 
 import (
 	"context"
-	"github.com/rs/zerolog/log"
-	"github.com/shutter-network/encrypting-rpc-server/utils"
-	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
-	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/rs/zerolog/log"
+	"github.com/shutter-network/encrypting-rpc-server/db"
+	"github.com/shutter-network/encrypting-rpc-server/utils"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
+	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 
 	"crypto/ecdsa"
 
@@ -35,6 +37,7 @@ var Config struct {
 	KeyperSetManagerAddress     string `mapstructure:"keyperset-manager-address"`
 	DelayInSeconds              int    `mapstructure:"delay-in-seconds"`
 	EncryptedGasLimit           uint64 `mapstructure:"encrypted-gas-limit"`
+	DbUrl                       string `mapstructure:"dburl"`
 }
 
 func Cmd() *cobra.Command {
@@ -118,6 +121,14 @@ func Cmd() *cobra.Command {
 		"encrypted gas limit",
 	)
 
+	cmd.PersistentFlags().StringVarP(
+		&Config.DbUrl,
+		"dbUrl",
+		"",
+		"",
+		"database url to connect to postgres database",
+	)
+
 	return cmd
 }
 
@@ -167,6 +178,11 @@ func Start() error {
 		utils.Logger.Fatal().Err(err).Msg("can not use Sequencer contract")
 	}
 
+	db, err := db.InitialMigration(Config.DbUrl)
+	if err != nil {
+		utils.Logger.Fatal().Err(err).Msg("can not instantiate postgres")
+	}
+
 	processor := rpc.Processor{
 		URL:                      Config.HTTPListenAddress,
 		RPCUrl:                   Config.RPCUrl,
@@ -177,6 +193,7 @@ func Start() error {
 		KeyBroadcastContract:     broadcastContract,
 		SequencerContract:        sequencerContract,
 		KeyperSetManagerContract: keyperSetManagerContract,
+		Db:                       db,
 	}
 
 	backendURL := &url.URL{}
@@ -192,7 +209,7 @@ func Start() error {
 		EncryptedGasLimit: Config.EncryptedGasLimit,
 	}
 
-	service := server.NewRPCService(processor, config)
+	service := server.NewRPCService(processor, config, db)
 	utils.Logger.Info().Str("listen-on", Config.HTTPListenAddress).Msg("Serving JSON-RPC")
 
 	func() {

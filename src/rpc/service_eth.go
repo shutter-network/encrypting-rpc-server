@@ -6,18 +6,21 @@ import (
 	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
+	"strconv"
+	"time"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/lib/pq"
 	"github.com/shutter-network/encrypting-rpc-server/cache"
+	"github.com/shutter-network/encrypting-rpc-server/db"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
-	"math/big"
-	"strconv"
-	"time"
 )
 
 var (
@@ -206,6 +209,13 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
 	utils.Logger.Info().Hex("Incoming tx hash", txHash.Bytes()).Hex("Encrypted tx hash", submitTx.Hash().Bytes()).Msg("Transaction sent")
+
+	service.Processor.Db.InsertOrUpdateNewTx(db.TransactionDetails{
+		TxHash:          txHash.String(),
+		EncryptedTxHash: pq.StringArray{submitTx.Hash().String()},
+		InclusionTime:   time.Now().Unix(),
+		Retries:         0,
+	})
 
 	return &txHash, nil
 }

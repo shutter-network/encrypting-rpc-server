@@ -3,12 +3,14 @@ package rpc
 import (
 	"context"
 	"crypto/ecdsa"
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/shutter-network/encrypting-rpc-server/db"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
-	"math/big"
 )
 
 type Processor struct {
@@ -21,6 +23,7 @@ type Processor struct {
 	KeyBroadcastContract     KeyBroadcastContract
 	SequencerContract        SequencerContract
 	KeyperSetManagerContract KeyperSetManagerContract
+	Db                       *db.PostgresDb
 }
 
 type Config struct {

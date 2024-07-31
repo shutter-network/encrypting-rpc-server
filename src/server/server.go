@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/shutter-network/encrypting-rpc-server/db"
+	"github.com/shutter-network/encrypting-rpc-server/utils"
 
 	ethrpc "github.com/ethereum/go-ethereum/rpc"
 	"github.com/go-chi/chi/v5"
@@ -66,14 +68,16 @@ func (p *JSONRPCProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type server struct {
-	processor rpc.Processor
-	config    rpc.Config
+	processor        rpc.Processor
+	config           rpc.Config
+	postgresDatabase *db.PostgresDb
 }
 
-func NewRPCService(processor rpc.Processor, config rpc.Config) medleyService.Service {
+func NewRPCService(processor rpc.Processor, config rpc.Config, pgDb *db.PostgresDb) medleyService.Service {
 	return &server{
-		processor: processor,
-		config:    config,
+		processor:        processor,
+		config:           config,
+		postgresDatabase: pgDb,
 	}
 }
 
@@ -122,11 +126,13 @@ func (srv *server) Start(ctx context.Context, runner medleyService.Runner) error
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	runner.Go(srv.postgresDatabase.Start)
 	runner.Go(httpServer.ListenAndServe)
 	runner.Go(func() error {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
+		srv.postgresDatabase.Stop()
 		return httpServer.Shutdown(shutdownCtx)
 	})
 	return nil

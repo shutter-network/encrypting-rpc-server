@@ -5,11 +5,18 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"io"
+	"os"
+	"os/exec"
+	"strings"
+	"testing"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
+	"github.com/shutter-network/encrypting-rpc-server/db"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/server"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
@@ -19,11 +26,6 @@ import (
 	medleyKeygen "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/testkeygen"
 	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
-	"io"
-	"os"
-	"os/exec"
-	"strings"
-	"testing"
 )
 
 func init() {
@@ -229,7 +231,8 @@ func SetupServer(ctx context.Context, t *testing.T) error {
 		BackendURL:        backendUrl,
 		HTTPListenAddress: processor.URL,
 	}
-	service := server.NewRPCService(processor, config)
+	db, _ := db.InitialMigration("")
+	service := server.NewRPCService(processor, config, db)
 	go func() {
 		err := medleyService.Run(ctx, service)
 		if err != nil {
