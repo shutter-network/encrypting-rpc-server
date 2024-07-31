@@ -124,7 +124,9 @@ func (srv *server) Start(ctx context.Context, runner medleyService.Runner) error
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	if srv.processor.MetricsConfig.Enabled {
-		runner.StartService(srv.processor.MetricsServer)
+		if err := runner.StartService(srv.processor.MetricsServer); err != nil {
+			return err
+		}
 	}
 	runner.Go(httpServer.ListenAndServe)
 	runner.Go(func() error {
