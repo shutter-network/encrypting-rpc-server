@@ -24,6 +24,7 @@ type Processor struct {
 	SequencerContract        SequencerContract
 	KeyperSetManagerContract KeyperSetManagerContract
 	MetricsServer            *metricsserver.MetricsServer
+	MetricsConfig            *metricsserver.MetricsConfig
 }
 
 type Config struct {

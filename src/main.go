@@ -125,7 +125,7 @@ func Cmd() *cobra.Command {
 
 	cmd.PersistentFlags().BoolVarP(
 		&Config.MetricsConfig.Enabled,
-		"metrics_enabled",
+		"metrics-enabled",
 		"",
 		false,
 		"to enable promnetheus metrics",
@@ -133,7 +133,7 @@ func Cmd() *cobra.Command {
 
 	cmd.PersistentFlags().StringVarP(
 		&Config.MetricsConfig.Host,
-		"metrics_host",
+		"metrics-host",
 		"",
 		"",
 		"metrics host",
@@ -141,7 +141,7 @@ func Cmd() *cobra.Command {
 
 	cmd.PersistentFlags().Uint16VarP(
 		&Config.MetricsConfig.Port,
-		"metrics_port",
+		"metrics-port",
 		"",
 		3000,
 		"metrics port",
@@ -206,6 +206,7 @@ func Start() error {
 		KeyBroadcastContract:     broadcastContract,
 		SequencerContract:        sequencerContract,
 		KeyperSetManagerContract: keyperSetManagerContract,
+		MetricsConfig:            &Config.MetricsConfig,
 	}
 
 	backendURL := &url.URL{}

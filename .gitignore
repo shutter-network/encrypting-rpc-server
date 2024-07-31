@@ -37,3 +37,4 @@ docker/.env
 #env
 .env
 
+data/
