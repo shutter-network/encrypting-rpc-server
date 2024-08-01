@@ -126,13 +126,12 @@ func (srv *server) Start(ctx context.Context, runner medleyService.Runner) error
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	runner.Go(srv.postgresDatabase.Start)
+	go srv.postgresDatabase.Start(ctx)
 	runner.Go(httpServer.ListenAndServe)
 	runner.Go(func() error {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		srv.postgresDatabase.Stop()
 		return httpServer.Shutdown(shutdownCtx)
 	})
 	return nil

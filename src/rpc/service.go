@@ -51,6 +51,7 @@ type EthereumClient interface {
 	CodeAt(ctx context.Context, account common.Address, blockNumber *big.Int) ([]byte, error)
 	NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error)
 	BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error)
+	BlockByHash(ctx context.Context, hash common.Hash) (*types.Block, error)
 }
 
 type KeyperSetManagerContract interface {
@@ -103,4 +104,8 @@ func (w *EthClientWrapper) NonceAt(ctx context.Context, account common.Address, 
 
 func (w *EthClientWrapper) BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
 	return w.Client.BalanceAt(ctx, account, blockNumber)
+}
+
+func (w *EthClientWrapper) BlockByHash(ctx context.Context, hash common.Hash) (*types.Block, error) {
+	return w.Client.BlockByHash(ctx, hash)
 }

@@ -178,7 +178,7 @@ func Start() error {
 		utils.Logger.Fatal().Err(err).Msg("can not use Sequencer contract")
 	}
 
-	db, err := db.InitialMigration(Config.DbUrl)
+	dbInst, err := db.InitialMigration(Config.DbUrl)
 	if err != nil {
 		utils.Logger.Fatal().Err(err).Msg("can not instantiate postgres")
 	}
@@ -193,7 +193,7 @@ func Start() error {
 		KeyBroadcastContract:     broadcastContract,
 		SequencerContract:        sequencerContract,
 		KeyperSetManagerContract: keyperSetManagerContract,
-		Db:                       db,
+		Db:                       dbInst,
 	}
 
 	backendURL := &url.URL{}
@@ -209,7 +209,7 @@ func Start() error {
 		EncryptedGasLimit: Config.EncryptedGasLimit,
 	}
 
-	service := server.NewRPCService(processor, config, db)
+	service := server.NewRPCService(processor, config, dbInst)
 	utils.Logger.Info().Str("listen-on", Config.HTTPListenAddress).Msg("Serving JSON-RPC")
 
 	func() {

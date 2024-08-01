@@ -3,24 +3,26 @@ package db
 import (
 	"context"
 
-	"github.com/lib/pq"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gorm_logger "gorm.io/gorm/logger"
 )
 
+const BufferSize = 10
+
 type PostgresDb struct {
-	ctx          context.Context
-	cancel       context.CancelFunc
-	DB           *gorm.DB
-	addTxChannel chan TransactionDetails
+	DB          *gorm.DB
+	addTxCh     chan TransactionDetails
+	inclusionCh chan TransactionDetails
 }
 
 type TransactionDetails struct {
-	TxHash          string         `gorm:"primaryKey;uniqueIndex:p"`
-	EncryptedTxHash pq.StringArray `gorm:"type:text[]"`
-	InclusionTime   int64
+	Address         string `gorm:"primaryKey;index:idx_address_nonce"`
+	Nonce           uint64 `gorm:"primaryKey;index:idx_address_nonce"`
+	TxHash          string `gorm:"primaryKey;index:idx_tx_hash"`
+	EncryptedTxHash string `gorm:"primaryKey"`
+	InclusionTime   uint64
 	Retries         uint64
 }
 
@@ -38,49 +40,58 @@ func InitialMigration(dbUrl string) (*PostgresDb, error) {
 		utils.Logger.Error().Err(err).Msg("failed to automigrate tables")
 	}
 
-	addTxChan := make(chan TransactionDetails)
+	inclusionCh := make(chan TransactionDetails, BufferSize)
+	addTxCh := make(chan TransactionDetails, BufferSize)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	return &PostgresDb{ctx: ctx, cancel: cancel, DB: db, addTxChannel: addTxChan}, nil
+	return &PostgresDb{DB: db, addTxCh: addTxCh, inclusionCh: inclusionCh}, nil
 }
 
-func (db *PostgresDb) InsertOrUpdateNewTx(txDetails TransactionDetails) {
-	db.addTxChannel <- txDetails
+func (db *PostgresDb) InsertNewTx(txDetails TransactionDetails) {
+	db.addTxCh <- txDetails
 }
 
-func (db *PostgresDb) Start() error {
+func (db *PostgresDb) FinaliseTx(receipt TransactionDetails) {
+	db.inclusionCh <- receipt
+}
+
+func (db *PostgresDb) Start(ctx context.Context) error {
 	for {
 		select {
-		case txDetails := <-db.addTxChannel:
-			db.DB.Transaction(func(tx *gorm.DB) error {
-				// Try to update existing record or insert a new one
-				query := `
-						INSERT INTO transaction_details (tx_hash, encrypted_tx_hash, inclusion_time, retries)
-						VALUES (?, ?, ?, ?)
-						ON CONFLICT (tx_hash)
-						DO UPDATE SET
-							encrypted_tx_hash = array(
-								SELECT DISTINCT unnest(transaction_details.encrypted_tx_hash) || ?
-								FROM transaction_details
-								WHERE tx_hash = ?
-							),
-							inclusion_time = EXCLUDED.inclusion_time,
-							retries = transaction_details.retries + 1
-						WHERE transaction_details.tx_hash = EXCLUDED.tx_hash`
+		case txDetails := <-db.addTxCh:
+			if err := db.DB.Create(txDetails).Error; err != nil {
+				utils.Logger.Info().Msgf("Error recording tx | txHash: %s | err: %v", txDetails.TxHash, err)
+				continue
+			}
+		case txDetails := <-db.inclusionCh:
+			println(txDetails.TxHash, "got hereerererere")
+			if err := db.DB.Transaction(func(tx *gorm.DB) error {
+				// Subquery to count rows with the same TxHash
+				subQuery := tx.Model(&TransactionDetails{}).
+					Select("COUNT(*) - 1").
+					Where("tx_hash = ?", txDetails.TxHash)
+					// Group("tx_hash")
 
-				result := tx.Exec(query, txDetails.TxHash, txDetails.EncryptedTxHash, txDetails.InclusionTime, txDetails.Retries, txDetails.EncryptedTxHash, txDetails.TxHash)
-				if result.Error != nil {
-					return result.Error
+				// Update all rows with new inclusion_time and retries count
+				if err := tx.Model(&TransactionDetails{}).
+					Where("tx_hash = ?", txDetails.TxHash).
+					Updates(map[string]interface{}{
+						"inclusion_time": txDetails.InclusionTime,
+						"retries":        gorm.Expr("(?)", subQuery),
+					}).Error; err != nil {
+					// Return any error will rollback the transaction
+					return err
 				}
+				// Return nil to commit the transaction
 				return nil
-			})
-		case <-db.ctx.Done():
+			}); err != nil {
+				utils.Logger.Info().Msgf("Error updating inclusion time | txHash: %s | err: %v", txDetails.TxHash, err)
+				continue
+			}
+
+		case <-ctx.Done():
+			close(db.addTxCh)
+			close(db.inclusionCh)
 			return nil
 		}
 	}
-}
-
-func (db *PostgresDb) Stop() {
-	defer db.cancel()
-	close(db.addTxChannel)
 }

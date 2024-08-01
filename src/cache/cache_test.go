@@ -2,10 +2,11 @@ package cache
 
 import (
 	"fmt"
-	"github.com/shutter-network/encrypting-rpc-server/testdata"
 	"math/big"
 	"sync"
 	"testing"
+
+	"github.com/shutter-network/encrypting-rpc-server/testdata"
 
 	"github.com/stretchr/testify/assert"
 )
