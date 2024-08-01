@@ -4,32 +4,50 @@ This server is using Gnosis Chain Configuration and Shutter Network Mempool encr
 
 ## Requirements
 
-To deploy and use for requests other than eth_sendRawTransaction
-* Ganache >= 7.0.0
-* Foundry >= 0.2.0
+To start and build the server within a docker container:
 
-To start and build the server:
-* Docker
+1. Copy the environment variables from `template.env` and adjust them as needed.
+   Use the values below to run the server against the Chiado testnet with the deployed contracts as of Aug 1.
 
-## How to run example
+    ```env
+    SERVICE_DOMAIN_NAME=localhost
+    # an url for a gnosis chain RPC service (which we will proxy with encryption)
+    UPSTREAM_RPC=https://rpc.chiadochain.net
+    # the private key for Sequencer submissions as non-0x-prefixed hex
+    SIGNING_KEY=YOUR_PRIVATE_KEY
+    # the ethereum address of the key broadcast contract
+    KEY_BROADCAST_CONTRACT_ADDRESS=0xDd9Ea21f682a6484ac40D36c97Fa056Fbce9004f
+    # the ethereum address of the sequencer contract
+    SEQUENCER_CONTRACT_ADDRESS=0xAC3209DCBced710Dc2612bD714b9EC947a6d1e8f
+    # the ethereum address of the keyper set manager contract
+    KEYPER_SET_MANAGER_CONTRACT_ADDRESS=0x6759Ab83de6f7d5bc4cf02d41BbB3Bd1500712E1
+    # the delay in seconds
+    DELAY_IN_SECONDS=100
+    # the db url
+    DB_URL="postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable"
+    ```
 
-1. First you need to use below command to get submodules:
-`git submodule update --init`
-2. Start a ganache server by:
-`ganache -b 5 -t 2021-12-08T20:55:40 --wallet.mnemonic brownie`
-3. Deploy contracts in /src folder by using:
-`make compile-contracts && make deploy`
-4. Build the container image:
-`docker build . -t encrypting-rpc-server`
-5. Run the server:
-`docker run -p 8546:8546 encrypting-rpc-server --signing-key bbfbee4961061d506ffbb11dfea64eba16355cbf1d9c29613126ba7fec0aed5d --key-broadcast-contract-address {KEY_BROADCAST_CONTRACT_ADDRESS} --sequencer-address {SEQUENCER_CONTRACT_ADDRESS} --keyper-set-manager-address {KEYPER_SET_MANAGER_CONTRACT_ADDRESS} --rpc-url http://host.docker.internal:8545`
+2. Build and run the application:
 
-Contract  addresses can be obtained from `gnosh-contracts/broadcast/deploy.s.sol/1337/run-latest.json`. There are `CREATE` `transactionType` and select `contractName` as what you need then  you have the `contractAddress`.  
+    ```sh
+    docker-compose up --build -d
+    ```
 
-There are other options you can use like:
+3. Alternatively, you can run the server locally following the below steps:
 
-* `rpc-url`: RPC URL from alchemy/infura or other providers. Default: http://localhost:8545
-* `http-listen-address`: Which address this server runs. Default: :8546
-* `keyper-set-change-look-ahead`: How much ahead your transactions should be revealed.
-* `dbUrl`: configuration for postgres db, eg: --dbUrl "host=localhost port=5432 user=postgres dbname=postgres password=postgres sslmode=disable"
+    ```sh
+    cd src
+    go build
+    ```
 
+   And then:
+
+    ```sh
+    ./encrypting-rpc-server \
+    --signing-key YOUR_PRIVATE_KEY \
+    --key-broadcast-contract-address 0xDd9Ea21f682a6484ac40D36c97Fa056Fbce9004f \
+    --sequencer-address 0xAC3209DCBced710Dc2612bD714b9EC947a6d1e8f \
+    --keyper-set-manager-address 0x6759Ab83de6f7d5bc4cf02d41BbB3Bd1500712E1 \
+    --rpc-url https://rpc.chiadochain.net \
+    --dbUrl "host=localhost port=5432 user=postgres dbname=postgres password=postgres sslmode=disable"
+    ```
