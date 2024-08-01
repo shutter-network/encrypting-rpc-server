@@ -135,7 +135,7 @@ func Cmd() *cobra.Command {
 		&Config.MetricsConfig.Host,
 		"metrics-host",
 		"",
-		"",
+		"localhost",
 		"metrics host",
 	)
 
