@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"gorm.io/driver/postgres"
@@ -35,9 +36,14 @@ func InitialMigration(dbUrl string) (*PostgresDb, error) {
 		utils.Logger.Error().Err(err).Msg("failed to connect database")
 	}
 
+	err = createRoleIfNotExists(db, "postgres", "postgres")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create role: %v", err)
+	}
 	// run migrations
 	if err := db.AutoMigrate(TransactionDetails{}); err != nil {
 		utils.Logger.Error().Err(err).Msg("failed to automigrate tables")
+		return nil, fmt.Errorf("failed to automigrate tables")
 	}
 
 	inclusionCh := make(chan TransactionDetails, BufferSize)
@@ -94,4 +100,22 @@ func (db *PostgresDb) Start(ctx context.Context) error {
 			return nil
 		}
 	}
+}
+
+func createRoleIfNotExists(db *gorm.DB, roleName, password string) error {
+	// Define the SQL statement with CREATEDB permission
+	sql := fmt.Sprintf(`
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '%s') THEN
+            EXECUTE 'CREATE ROLE %s WITH LOGIN CREATEDB PASSWORD ''%s''';
+        END IF;
+    END $$;
+    `, roleName, roleName, password)
+
+	// Execute the SQL statement
+	if err := db.Exec(sql).Error; err != nil {
+		return fmt.Errorf("failed to create role: %w", err)
+	}
+	return nil
 }
