@@ -31,4 +31,5 @@ There are other options you can use like:
 * `rpc-url`: RPC URL from alchemy/infura or other providers. Default: http://localhost:8545
 * `http-listen-address`: Which address this server runs. Default: :8546
 * `keyper-set-change-look-ahead`: How much ahead your transactions should be revealed.
+* `dbUrl`: configuration for postgres db, eg: --dbUrl "host=localhost port=5432 user=postgres dbname=postgres password=postgres sslmode=disable"
 
