@@ -255,7 +255,7 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 	identity := ComputeIdentity(identityPrefix[:], newSigner.From)
 	encryptedTx := shcrypto.Encrypt(b, eonKey, identity, sigma)
 
-	metrics.MetricsEncryptionDuration.WithLabelValues(tx.Hash().String()).Observe(float64(time.Since(timeBefore).Seconds()))
+	metrics.MetricsEncryptionDuration.WithLabelValues(tx.Hash().String()).Observe(time.Since(timeBefore).Seconds())
 
 	opts := bind.TransactOpts{
 		From:   *service.Processor.SigningAddress,

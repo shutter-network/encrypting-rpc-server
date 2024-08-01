@@ -143,7 +143,7 @@ func Cmd() *cobra.Command {
 		&Config.MetricsConfig.Port,
 		"metrics-port",
 		"",
-		3000,
+		9090,
 		"metrics port",
 	)
 

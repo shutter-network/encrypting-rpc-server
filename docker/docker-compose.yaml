@@ -34,3 +34,14 @@ services:
       - 443:443
     labels:
       caddy.email: "devops@brainbot.com"
+
+  vm:
+    image: victoriametrics/victoria-metrics
+    restart: always
+    command: -promscrape.config /config/prometheus.yml
+    ports:
+      - "8428:8428"
+    volumes:
+      - ../data/victoriametrics:/victoria-metrics-data
+      - ../config:/config
+
