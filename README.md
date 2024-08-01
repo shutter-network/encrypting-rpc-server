@@ -6,7 +6,11 @@ This server is using Gnosis Chain Configuration and Shutter Network Mempool encr
 
 To start and build the server within a docker container:
 
-1. Copy the environment variables from `template.env` and adjust them as needed.
+1. Clone the repository
+
+2. Change to the docker directory
+
+3. Copy the environment variables from `template.env` and adjust them as needed.
    Use the values below to run the server against the Chiado testnet with the deployed contracts as of Aug 1.
 
     ```env
@@ -27,13 +31,13 @@ To start and build the server within a docker container:
     DB_URL="postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable"
     ```
 
-2. Build and run the application:
+4. Build and run the application:
 
     ```sh
     docker-compose up --build -d
     ```
 
-3. Alternatively, you can run the server locally following the below steps:
+5. Alternatively, you can run the server locally following the below steps:
 
     ```sh
     cd src
