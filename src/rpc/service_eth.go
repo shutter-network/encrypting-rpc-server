@@ -275,10 +275,11 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 	return submitTx, nil
 }
 
-func (s *EthService) WaitTillMined(ctx context.Context, tx *types.Transaction, delayInSeconds int) error {
+func (s *EthService) WaitTillMined(ctx context.Context, tx *types.Transaction, delayInSeconds int) {
 	key, err := s.Cache.Key(tx)
 	if err != nil {
-		return err
+		utils.Logger.Debug().Msgf("WaitTillMined | error in generating key | err: %v", err)
+		return
 	}
 	value := s.Cache.InclusionCache[key]
 
@@ -295,13 +296,13 @@ func (s *EthService) WaitTillMined(ctx context.Context, tx *types.Transaction, d
 				block, err := s.Processor.Client.BlockByHash(ctx, receipt.BlockHash)
 				if err != nil {
 					utils.Logger.Debug().Msgf("Error getting block | blockHash: %s", receipt.BlockHash.String())
-					return err
+					return
 				}
 				s.Processor.Db.FinaliseTx(db.TransactionDetails{
 					TxHash:        tx.Hash().String(),
 					InclusionTime: block.Time(),
 				})
-				return nil
+				return
 			}
 
 			if errors.Is(err, ethereum.NotFound) {
@@ -309,16 +310,16 @@ func (s *EthService) WaitTillMined(ctx context.Context, tx *types.Transaction, d
 			} else {
 				delete(s.Cache.InclusionCache, key)
 				utils.Logger.Debug().Msgf("receipt retrieval failed | txHash: %s | err: %W", tx.Hash().String(), err)
-				return fmt.Errorf("receipt retrieval failed | txHash: %s | err: %W", tx.Hash().String(), err)
+				return
 			}
 
 			// Wait for the next round.
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return
 			case <-queryTicker.C:
 			}
 		}
 	}
-	return nil
+	return
 }

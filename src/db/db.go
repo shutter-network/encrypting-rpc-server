@@ -34,12 +34,13 @@ func InitialMigration(dbUrl string) (*PostgresDb, error) {
 	db, err := gorm.Open(postgres.Open(dbUrl), gormConfig)
 	if err != nil {
 		utils.Logger.Error().Err(err).Msg("failed to connect database")
+		return nil, fmt.Errorf("failed to connect database | err: %v", err)
 	}
 
 	// run migrations
 	if err := db.AutoMigrate(TransactionDetails{}); err != nil {
 		utils.Logger.Error().Err(err).Msg("failed to automigrate tables")
-		return nil, fmt.Errorf("failed to automigrate tables")
+		return nil, fmt.Errorf("failed to automigrate tables | err: %v", err)
 	}
 
 	inclusionCh := make(chan TransactionDetails, BufferSize)
@@ -56,8 +57,15 @@ func (db *PostgresDb) FinaliseTx(receipt TransactionDetails) {
 	db.inclusionCh <- receipt
 }
 
-func (db *PostgresDb) Start(ctx context.Context) error {
+func (db *PostgresDb) Start(ctx context.Context) {
 	for {
+		sqlDb, err := db.DB.DB()
+		if err != nil {
+			utils.Logger.Info().Msgf("cannot initiate sqlDb | err: %v", err)
+			panic(fmt.Sprintf("cannot initiate sqlDb | err: %v", err))
+		}
+		defer sqlDb.Close()
+
 		select {
 		case txDetails := <-db.addTxCh:
 			if err := db.DB.Create(txDetails).Error; err != nil {
@@ -65,7 +73,6 @@ func (db *PostgresDb) Start(ctx context.Context) error {
 				continue
 			}
 		case txDetails := <-db.inclusionCh:
-			println(txDetails.TxHash, "got hereerererere")
 			if err := db.DB.Transaction(func(tx *gorm.DB) error {
 				// Subquery to count rows with the same TxHash
 				subQuery := tx.Model(&TransactionDetails{}).
@@ -93,7 +100,7 @@ func (db *PostgresDb) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			close(db.addTxCh)
 			close(db.inclusionCh)
-			return nil
+			return
 		}
 	}
 }
