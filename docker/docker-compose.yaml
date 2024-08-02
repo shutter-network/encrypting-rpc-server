@@ -16,6 +16,9 @@ services:
       --keyper-set-manager-address ${KEYPER_SET_MANAGER_CONTRACT_ADDRESS}
       --rpc-url ${UPSTREAM_RPC}
       --delay-in-seconds ${DELAY_IN_SECONDS}
+      --metrics-port ${METRICS_PORT}
+      --metrics-enabled ${METRICS_ENABLED}
+      --metrics-host ${METRICS_HOST}
     labels:
       caddy: "${SERVICE_DOMAIN_NAME}"
       caddy.@browser: "method GET"
