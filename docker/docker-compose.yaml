@@ -14,6 +14,8 @@ services:
       --keyper-set-manager-address ${KEYPER_SET_MANAGER_CONTRACT_ADDRESS}
       --rpc-url ${UPSTREAM_RPC}
       --delay-in-seconds ${DELAY_IN_SECONDS}
+    networks:
+      - app-network
     labels:
       caddy: "${SERVICE_DOMAIN_NAME}"
       caddy.@browser: "method GET"
@@ -32,6 +34,8 @@ services:
     ports:
       - 80:80
       - 443:443
+    networks:
+      - app-network
     labels:
       caddy.email: "devops@brainbot.com"
 
@@ -45,3 +49,6 @@ services:
       - ../data/victoriametrics:/victoria-metrics-data
       - ../config:/config
 
+networks:
+  app-network:
+    driver: bridge
