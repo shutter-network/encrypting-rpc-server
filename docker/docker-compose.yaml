@@ -6,6 +6,8 @@ services:
     build:
       context: ../
     env_file: .env
+    ports:
+      4000:4000
     command: >
       start
       --signing-key ${SIGNING_KEY}
