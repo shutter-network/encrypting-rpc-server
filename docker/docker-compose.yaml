@@ -14,8 +14,6 @@ services:
       --keyper-set-manager-address ${KEYPER_SET_MANAGER_CONTRACT_ADDRESS}
       --rpc-url ${UPSTREAM_RPC}
       --delay-in-seconds ${DELAY_IN_SECONDS}
-    networks:
-      - app-network
     labels:
       caddy: "${SERVICE_DOMAIN_NAME}"
       caddy.@browser: "method GET"
@@ -38,17 +36,3 @@ services:
       - app-network
     labels:
       caddy.email: "devops@brainbot.com"
-
-  vm:
-    image: victoriametrics/victoria-metrics
-    restart: always
-    command: -promscrape.config /config/prometheus.yml
-    ports:
-      - "8428:8428"
-    volumes:
-      - ../data/victoriametrics:/victoria-metrics-data
-      - ../config:/config
-
-networks:
-  app-network:
-    driver: bridge
