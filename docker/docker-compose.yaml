@@ -17,8 +17,6 @@ services:
       --dbUrl ${DB_URL}
     ports:
       - "8546:8546"
-    networks:
-      - app-network
     depends_on:
       - postgres
     labels:
@@ -33,8 +31,6 @@ services:
   caddy:
     image: lucaslorentz/caddy-docker-proxy:latest
     restart: always
-    networks:
-      - app-network
     volumes:
       - ${DATA_DIR:-./data}/caddy:/data
       - /var/run/docker.sock:/var/run/docker.sock
@@ -48,8 +44,6 @@ services:
     image: postgres:14-alpine
     ports:
       - "5432:5432"
-    networks:
-      - app-network
     environment:
       POSTGRES_DB: "postgres"
       POSTGRES_USER: "postgres"
@@ -60,6 +54,3 @@ services:
       timeout: 5s
       retries: 5
 
-networks:
-  app-network:
-    driver: bridge
