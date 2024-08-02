@@ -7,7 +7,7 @@ services:
       context: ../
     env_file: .env
     ports:
-      4000:4000
+      - 4000:4000
     command: >
       start
       --signing-key ${SIGNING_KEY}
@@ -34,7 +34,5 @@ services:
     ports:
       - 80:80
       - 443:443
-    networks:
-      - app-network
     labels:
       caddy.email: "devops@brainbot.com"
