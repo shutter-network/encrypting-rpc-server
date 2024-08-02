@@ -2,9 +2,10 @@ package cache
 
 import (
 	"fmt"
+	"sync"
+
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
-	"sync"
 )
 
 type TransactionInfo struct {
@@ -14,14 +15,16 @@ type TransactionInfo struct {
 
 type Cache struct {
 	sync.RWMutex
-	Data        map[string]TransactionInfo
-	DelayFactor int64
+	Data           map[string]TransactionInfo
+	InclusionCache map[string]*types.Transaction
+	DelayFactor    int64
 }
 
 func NewCache(delayFactor int64) *Cache {
 	return &Cache{
-		Data:        make(map[string]TransactionInfo),
-		DelayFactor: delayFactor,
+		Data:           make(map[string]TransactionInfo),
+		DelayFactor:    delayFactor,
+		InclusionCache: make(map[string]*types.Transaction),
 	}
 }
 

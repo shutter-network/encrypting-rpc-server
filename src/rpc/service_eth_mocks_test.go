@@ -2,13 +2,14 @@ package rpc_test
 
 import (
 	"context"
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	"github.com/stretchr/testify/mock"
-	"math/big"
 )
 
 type MockEthereumClient struct {
@@ -86,6 +87,11 @@ func (m *MockEthereumClient) NonceAt(ctx context.Context, account common.Address
 func (m *MockEthereumClient) BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
 	args := m.Called(ctx, account, blockNumber)
 	return args.Get(0).(*big.Int), args.Error(1)
+}
+
+func (m *MockEthereumClient) BlockByHash(ctx context.Context, hash common.Hash) (*types.Block, error) {
+	args := m.Called(ctx, hash)
+	return args.Get(0).(*types.Block), args.Error(1)
 }
 
 func (m *MockKeyperSetManagerContract) GetKeyperSetIndexByBlock(opts *bind.CallOpts, blockNumber uint64) (uint64, error) {

@@ -3,12 +3,14 @@ package rpc
 import (
 	"context"
 	"crypto/ecdsa"
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/shutter-network/encrypting-rpc-server/db"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
-	"math/big"
 )
 
 type Processor struct {
@@ -21,6 +23,7 @@ type Processor struct {
 	KeyBroadcastContract     KeyBroadcastContract
 	SequencerContract        SequencerContract
 	KeyperSetManagerContract KeyperSetManagerContract
+	Db                       *db.PostgresDb
 }
 
 type Config struct {
@@ -48,6 +51,7 @@ type EthereumClient interface {
 	CodeAt(ctx context.Context, account common.Address, blockNumber *big.Int) ([]byte, error)
 	NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error)
 	BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error)
+	BlockByHash(ctx context.Context, hash common.Hash) (*types.Block, error)
 }
 
 type KeyperSetManagerContract interface {
@@ -100,4 +104,8 @@ func (w *EthClientWrapper) NonceAt(ctx context.Context, account common.Address, 
 
 func (w *EthClientWrapper) BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
 	return w.Client.BalanceAt(ctx, account, blockNumber)
+}
+
+func (w *EthClientWrapper) BlockByHash(ctx context.Context, hash common.Hash) (*types.Block, error) {
+	return w.Client.BlockByHash(ctx, hash)
 }
