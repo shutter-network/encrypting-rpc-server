@@ -39,3 +39,9 @@ services:
       - 443:443
     labels:
       caddy.email: "devops@brainbot.com"
+
+  node_exporter:
+    image: prom/node-exporter:latest
+    container_name: my_node_exporter
+    ports:
+      - "9100:9100"
