@@ -31,4 +31,4 @@ There are other options you can use like:
 * `rpc-url`: RPC URL from alchemy/infura or other providers. Default: http://localhost:8545
 * `http-listen-address`: Which address this server runs. Default: :8546
 * `keyper-set-change-look-ahead`: How much ahead your transactions should be revealed.
-
+* For running the server with prometheus metrics enabled, use `metrics-port`, `metrics-host` and `metrics-port`

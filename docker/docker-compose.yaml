@@ -32,5 +32,7 @@ services:
     ports:
       - 80:80
       - 443:443
+    networks:
+      - app-network
     labels:
       caddy.email: "devops@brainbot.com"
