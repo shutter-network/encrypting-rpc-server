@@ -218,7 +218,8 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		EncryptedTxHash: submitTx.Hash().String(),
 	})
 
-	go service.WaitTillMined(context.Background(), tx, service.Config.DelayInSeconds)
+	_ctx, _ := context.WithTimeout(context.Background(), time.Duration(service.Config.DelayInSeconds)*10*time.Second)
+	go service.WaitTillMined(_ctx, tx, service.Config.DelayInSeconds)
 
 	return &txHash, nil
 }
