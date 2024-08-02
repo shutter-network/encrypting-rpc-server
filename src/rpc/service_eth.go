@@ -321,5 +321,4 @@ func (s *EthService) WaitTillMined(ctx context.Context, tx *types.Transaction, d
 			}
 		}
 	}
-	return
 }
