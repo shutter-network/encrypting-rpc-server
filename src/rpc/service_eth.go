@@ -210,8 +210,10 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	}
 	utils.Logger.Info().Hex("Incoming tx hash", txHash.Bytes()).Hex("Encrypted tx hash", submitTx.Hash().Bytes()).Msg("Transaction sent")
 
-	metrics.MetricsRequestedGasLimit.WithLabelValues(txHash.String()).Observe(float64(tx.Gas()))
+	metrics.MetricsRequestedGasLimit.WithLabelValues(submitTx.Hash().String()).Observe(float64(tx.Gas()))
 	metrics.MetricsTotalRequestDuration.WithLabelValues(txHash.String()).Observe(float64(time.Since(timeBefore).Milliseconds()))
+	metrics.MetricsTotalRequestDuration.WithLabelValues(submitTx.Hash().String()).Observe(float64(time.Since(timeBefore).Milliseconds()))
+
 	return &txHash, nil
 }
 
@@ -255,7 +257,7 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 	identity := ComputeIdentity(identityPrefix[:], newSigner.From)
 	encryptedTx := shcrypto.Encrypt(b, eonKey, identity, sigma)
 
-	metrics.MetricsEncryptionDuration.WithLabelValues(tx.Hash().String()).Observe(float64(time.Since(timeBefore).Milliseconds()))
+	encryptionDuration := time.Since(timeBefore).Milliseconds()
 
 	opts := bind.TransactOpts{
 		From:   *service.Processor.SigningAddress,
@@ -268,5 +270,7 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
+	metrics.MetricsEncryptionDuration.WithLabelValues(submitTx.Hash().String()).Observe(float64(encryptionDuration))
+
 	return submitTx, nil
 }
