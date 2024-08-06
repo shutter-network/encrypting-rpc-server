@@ -12,7 +12,7 @@ var MetricsTotalRequestDuration = prometheus.NewHistogramVec(
 		Help:      "Histogram of the time it takes for all requests.",
 		Buckets:   prometheus.DefBuckets,
 	},
-	[]string{"request"},
+	[]string{"encrypted_tx_hash", "tx_hash"},
 )
 
 var MetricsEncryptionDuration = prometheus.NewHistogramVec(
@@ -23,7 +23,7 @@ var MetricsEncryptionDuration = prometheus.NewHistogramVec(
 		Help:      "Histogram of the time it takes for encrypting a tx",
 		Buckets:   prometheus.DefBuckets,
 	},
-	[]string{"request"},
+	[]string{"encrypted_tx_hash"},
 )
 
 var MetricsRequestedGasLimit = prometheus.NewHistogramVec(
@@ -34,7 +34,7 @@ var MetricsRequestedGasLimit = prometheus.NewHistogramVec(
 		Help:      "Histogram of the gas limit requested in tx",
 		Buckets:   prometheus.DefBuckets,
 	},
-	[]string{"request"},
+	[]string{"encrypted_tx_hash"},
 )
 
 func InitMetrics() {

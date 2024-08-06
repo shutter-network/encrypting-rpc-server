@@ -211,8 +211,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	utils.Logger.Info().Hex("Incoming tx hash", txHash.Bytes()).Hex("Encrypted tx hash", submitTx.Hash().Bytes()).Msg("Transaction sent")
 
 	metrics.MetricsRequestedGasLimit.WithLabelValues(submitTx.Hash().String()).Observe(float64(tx.Gas()))
-	metrics.MetricsTotalRequestDuration.WithLabelValues(txHash.String()).Observe(float64(time.Since(timeBefore).Milliseconds()))
-	metrics.MetricsTotalRequestDuration.WithLabelValues(submitTx.Hash().String()).Observe(float64(time.Since(timeBefore).Milliseconds()))
+	metrics.MetricsTotalRequestDuration.WithLabelValues(submitTx.Hash().String(), txHash.String()).Observe(float64(time.Since(timeBefore).Milliseconds()))
 
 	return &txHash, nil
 }
