@@ -26,13 +26,15 @@ var MetricsEncryptionDuration = prometheus.NewHistogramVec(
 	[]string{"encrypted_tx_hash"},
 )
 
+var gasLimitBuckets = []float64{21000, 25000, 35000, 50000, 70000, 100000, 200000, 500000, 1000000, 10000000, 30000000}
+
 var MetricsRequestedGasLimit = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Namespace: "encrypting_rpc_server",
 		Subsystem: "request",
 		Name:      "requested_gas_limit",
 		Help:      "Histogram of the gas limit requested in tx",
-		Buckets:   prometheus.DefBuckets,
+		Buckets:   gasLimitBuckets,
 	},
 	[]string{"encrypted_tx_hash"},
 )
