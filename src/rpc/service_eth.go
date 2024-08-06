@@ -194,14 +194,21 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		return &txHash, nil
 	}
 
-	sendStatus, err := service.Cache.ProcessTxEntry(tx, time.Now().Unix())
+	statuses, err := service.Cache.ProcessTxEntry(tx, time.Now().Unix())
 	if err != nil {
 		utils.Logger.Err(err).Msg("Failed to update the cache.")
 		return nil, &EncodingError{StatusCode: -32603, Err: err}
 	}
 
-	if !sendStatus {
+	if !statuses.SendStatus {
 		utils.Logger.Info().Hex("Tx hash", txHash.Bytes()).Msg("Transaction delayed")
+		if statuses.UpdateStatus { // this is the same tx, just requested more than once so we do not add it to db
+			service.Processor.Db.InsertNewTx(db.TransactionDetails{
+				Address: fromAddress.String(),
+				Nonce:   tx.Nonce(),
+				TxHash:  txHash.String(),
+			})
+		}
 		return &txHash, nil
 	}
 
@@ -216,6 +223,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		Nonce:           tx.Nonce(),
 		TxHash:          txHash.String(),
 		EncryptedTxHash: submitTx.Hash().String(),
+		SubmissionTime:  time.Now().Unix(),
 	})
 
 	_ctx, _ := context.WithTimeout(context.Background(), time.Duration(service.Config.DelayInSeconds)*10*time.Second)

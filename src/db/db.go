@@ -23,6 +23,7 @@ type TransactionDetails struct {
 	Nonce           uint64 `gorm:"primaryKey;index:idx_address_nonce"`
 	TxHash          string `gorm:"primaryKey;index:idx_tx_hash"`
 	EncryptedTxHash string `gorm:"primaryKey"`
+	SubmissionTime  int64
 	InclusionTime   uint64
 	Retries         uint64
 }
@@ -77,8 +78,7 @@ func (db *PostgresDb) Start(ctx context.Context) {
 				// Subquery to count rows with the same TxHash
 				subQuery := tx.Model(&TransactionDetails{}).
 					Select("COUNT(*) - 1").
-					Where("tx_hash = ?", txDetails.TxHash)
-				// Group("tx_hash")
+					Where("tx_hash = ? AND encrypted_tx_hash IS NOT NULL AND encrypted_tx_hash <> ''", txDetails.TxHash)
 
 				// Update all rows with new inclusion_time and retries count
 				if err := tx.Model(&TransactionDetails{}).
