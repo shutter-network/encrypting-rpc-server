@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/cache"
 	"github.com/shutter-network/encrypting-rpc-server/metrics"
@@ -95,6 +96,7 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 				txHash, err := s.SendRawTransaction(ctx, rawTx)
 
 				if err != nil {
+					metrics.MetricsErrorReturnedCounter.Desc()
 					utils.Logger.Error().Err(err).Msgf("Failed to send transaction.")
 					continue
 				}
@@ -122,56 +124,56 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 
 	blockNumber, err := service.Processor.Client.BlockNumber(ctx)
 	if err != nil {
-		return nil, &EncodingError{StatusCode: -32602, Err: err}
+		return nil, returnError(-32602, err)
 	}
 
 	b, err := hexutil.Decode(s)
 	if err != nil {
-		return nil, &EncodingError{StatusCode: -32602, Err: err}
+		return nil, returnError(-32602, err)
 	}
 	tx := new(txtypes.Transaction)
 
 	if err := tx.UnmarshalBinary(b); err != nil {
-		return nil, &EncodingError{StatusCode: -32602, Err: err}
+		return nil, returnError(-32602, err)
 	}
 
 	txHash := tx.Hash()
 	fromAddress, err := utils.SenderAddress(tx)
 	if err != nil {
-		return nil, &EncodingError{StatusCode: -32602, Err: err}
+		return nil, returnError(-32602, err)
 	}
 
 	accountNonce, err := service.Processor.Client.NonceAt(ctx, fromAddress, nil)
 	if err != nil {
-		return nil, &EncodingError{StatusCode: -32602, Err: err}
+		return nil, returnError(-32602, err)
 	}
 
 	if accountNonce > tx.Nonce() {
-		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("nonce is not correct")}
+		return nil, returnError(-32000, errors.New("nonce is not correct"))
 	}
 
 	accountBalance, err := service.Processor.Client.BalanceAt(ctx, fromAddress, nil)
 	if err != nil {
-		return nil, &EncodingError{StatusCode: -32602, Err: err}
+		return nil, returnError(-32602, err)
 	}
 
 	if accountBalance.Cmp(tx.Cost()) == -1 {
-		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("gas cost is higher")}
+		return nil, returnError(-32000, errors.New("gas cost is higher"))
 	}
 
 	intrinsicGas, err := CalculateIntrinsicGas(tx)
 	if err != nil {
-		return nil, &EncodingError{StatusCode: -32602, Err: errors.New("error calculating the intrinsic gas: " + err.Error())}
+		return nil, returnError(-32602, errors.New("error calculating the intrinsic gas: "+err.Error()))
 	}
 
 	if tx.Gas() < intrinsicGas {
-		return nil, &EncodingError{StatusCode: -32602, Err: errors.New("gas limit below the intrinsic gas limit " +
-			"" + strconv.FormatUint(intrinsicGas, 10))}
+		return nil, returnError(-32602, errors.New("gas limit below the intrinsic gas limit "+
+			""+strconv.FormatUint(intrinsicGas, 10)))
 	}
 
 	if tx.Gas() > service.Config.EncryptedGasLimit {
-		return nil, &EncodingError{StatusCode: -32000, Err: errors.New("gas limit exceeds encrypted gas limit " +
-			"(max gas limit allowed per shutterized block)")}
+		return nil, returnError(-32000, errors.New("gas limit exceeds encrypted gas limit "+
+			"(max gas limit allowed per shutterized block)"))
 	}
 
 	if utils.IsCancellationTransaction(tx, fromAddress) {
@@ -180,15 +182,16 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		backendClient, err := rpc.Dial(service.Config.BackendURL.String())
 		if err != nil {
 			utils.Logger.Err(err).Msg("Failed to connect to backend")
-			return nil, &EncodingError{StatusCode: -32603, Err: err}
+			return nil, returnError(-32603, err)
 		}
 
 		err = backendClient.CallContext(ctx, &txHash, "eth_sendRawTransaction", s)
 		if err != nil {
 			utils.Logger.Err(err).Msg("Failed to send cancel transaction to backend")
-			return nil, &EncodingError{StatusCode: -32602, Err: err}
+			return nil, returnError(-32602, err)
 		}
 
+		metrics.MetricsCancellationTxCounter.WithLabelValues(txHash.String()).Inc()
 		utils.Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
 		return &txHash, nil
 	}
@@ -272,4 +275,44 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 	metrics.MetricsEncryptionDuration.WithLabelValues(submitTx.Hash().String()).Observe(float64(encryptionDuration))
 
 	return submitTx, nil
+}
+
+func (p *Processor) MonitorBalance(ctx context.Context, delayInSeconds int) {
+	timer := time.NewTicker(time.Duration(delayInSeconds) * time.Second)
+
+	backendClient, err := ethclient.Dial(p.RPCUrl)
+	if err != nil {
+		utils.Logger.Err(err).Msg("Failed to connect to backend")
+		return
+	}
+	defer backendClient.Close()
+
+	for {
+		select {
+		case <-ctx.Done():
+			utils.Logger.Info().Msg("Stopping because context is done.")
+			return
+
+		case <-timer.C:
+			balance, err := p.Client.BalanceAt(context.Background(), *p.SigningAddress, nil)
+			if err != nil {
+				utils.Logger.Err(err).Msg("Failed to get balance")
+				continue
+			}
+
+			// Convert balance from Wei to Ether
+			ethValue := new(big.Float).Quo(new(big.Float).SetInt(balance), big.NewFloat(1e18))
+			balanceInFloat, _ := ethValue.Float64()
+
+			metrics.MetricsERPCBalance.Set(balanceInFloat)
+		}
+	}
+}
+
+func returnError(status int, msg error) *EncodingError {
+	metrics.MetricsErrorReturnedCounter.Inc()
+	return &EncodingError{
+		StatusCode: status,
+		Err:        msg,
+	}
 }

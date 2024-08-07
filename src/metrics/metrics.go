@@ -39,8 +39,51 @@ var MetricsRequestedGasLimit = prometheus.NewHistogramVec(
 	[]string{"encrypted_tx_hash"},
 )
 
+var MetricsUpstreamRequestDuration = prometheus.NewHistogramVec(
+	prometheus.HistogramOpts{
+		Namespace: "encrypting_rpc_server",
+		Subsystem: "upstream_request",
+		Name:      "duration",
+		Help:      "Histogram of the request duration for upstream request",
+		Buckets:   prometheus.DefBuckets,
+	},
+	[]string{"method"},
+)
+
+var MetricsCancellationTxCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Namespace: "encrypting_rpc_server",
+		Subsystem: "request",
+		Name:      "cancellation_tx_counter",
+		Help:      "Counter of tx which were cancelled",
+	},
+	[]string{"tx_hash"},
+)
+
+var MetricsErrorReturnedCounter = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Namespace: "encrypting_rpc_server",
+		Subsystem: "request",
+		Name:      "error_returned",
+		Help:      "Counter of error returned",
+	},
+)
+
+var MetricsERPCBalance = prometheus.NewGauge(
+	prometheus.GaugeOpts{
+		Namespace: "encrypting_rpc_server",
+		Subsystem: "balance",
+		Name:      "erpc_address_balance",
+		Help:      "Native token balance",
+	},
+)
+
 func InitMetrics() {
 	prometheus.MustRegister(MetricsTotalRequestDuration)
 	prometheus.MustRegister(MetricsEncryptionDuration)
 	prometheus.MustRegister(MetricsRequestedGasLimit)
+	prometheus.MustRegister(MetricsUpstreamRequestDuration)
+	prometheus.MustRegister(MetricsCancellationTxCounter)
+	prometheus.MustRegister(MetricsErrorReturnedCounter)
+	prometheus.MustRegister(MetricsERPCBalance)
 }
