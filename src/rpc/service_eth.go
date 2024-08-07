@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/cache"
 	"github.com/shutter-network/encrypting-rpc-server/metrics"
@@ -279,13 +278,6 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 
 func (p *Processor) MonitorBalance(ctx context.Context, delayInSeconds int) {
 	timer := time.NewTicker(time.Duration(delayInSeconds) * time.Second)
-
-	backendClient, err := ethclient.Dial(p.RPCUrl)
-	if err != nil {
-		utils.Logger.Err(err).Msg("Failed to connect to backend")
-		return
-	}
-	defer backendClient.Close()
 
 	for {
 		select {
