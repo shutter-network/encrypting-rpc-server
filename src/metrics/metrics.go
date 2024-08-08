@@ -73,7 +73,7 @@ var MetricsERPCBalance = prometheus.NewGauge(
 	prometheus.GaugeOpts{
 		Namespace: "encrypting_rpc_server",
 		Subsystem: "balance",
-		Name:      "erpc_address_balance",
+		Name:      "erpc_address_balance_xdai",
 		Help:      "Native token balance",
 	},
 )
