@@ -54,7 +54,7 @@ var MetricsCancellationTxCounter = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Namespace: "encrypting_rpc_server",
 		Subsystem: "request",
-		Name:      "cancellation_tx_counter",
+		Name:      "cancellation_txs_total",
 		Help:      "Counter of tx which were cancelled",
 	},
 	[]string{"tx_hash"},
