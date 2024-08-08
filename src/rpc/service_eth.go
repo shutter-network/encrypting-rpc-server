@@ -95,7 +95,7 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 				txHash, err := s.SendRawTransaction(ctx, rawTx)
 
 				if err != nil {
-					metrics.MetricsErrorReturnedCounter.Desc()
+					metrics.CancellationTxGauge.WithLabelValues(txHash.String()).Dec()
 					utils.Logger.Error().Err(err).Msgf("Failed to send transaction.")
 					continue
 				}
@@ -190,7 +190,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 			return nil, returnError(-32602, err)
 		}
 
-		metrics.MetricsCancellationTxCounter.WithLabelValues(txHash.String()).Inc()
+		metrics.CancellationTxGauge.WithLabelValues(txHash.String()).Inc()
 		utils.Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
 		return &txHash, nil
 	}
@@ -198,7 +198,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	sendStatus, err := service.Cache.ProcessTxEntry(tx, time.Now().Unix())
 	if err != nil {
 		utils.Logger.Err(err).Msg("Failed to update the cache.")
-		return nil, &EncodingError{StatusCode: -32603, Err: err}
+		return nil, returnError(-32603, err)
 	}
 
 	if !sendStatus {
@@ -208,12 +208,12 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 
 	submitTx, err := service.ProcessTransaction(tx, ctx, service, blockNumber, b)
 	if err != nil {
-		return nil, &EncodingError{StatusCode: -32603, Err: err}
+		return nil, returnError(-32603, err)
 	}
 	utils.Logger.Info().Hex("Incoming tx hash", txHash.Bytes()).Hex("Encrypted tx hash", submitTx.Hash().Bytes()).Msg("Transaction sent")
 
-	metrics.MetricsRequestedGasLimit.WithLabelValues(submitTx.Hash().String()).Observe(float64(tx.Gas()))
-	metrics.MetricsTotalRequestDuration.WithLabelValues(submitTx.Hash().String(), txHash.String()).Observe(float64(time.Since(timeBefore).Seconds()))
+	metrics.RequestedGasLimit.WithLabelValues(submitTx.Hash().String()).Observe(float64(tx.Gas()))
+	metrics.TotalRequestDuration.WithLabelValues(submitTx.Hash().String(), txHash.String()).Observe(float64(time.Since(timeBefore).Seconds()))
 
 	return &txHash, nil
 }
@@ -271,7 +271,7 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-	metrics.MetricsEncryptionDuration.WithLabelValues(submitTx.Hash().String()).Observe(float64(encryptionDuration))
+	metrics.EncryptionDuration.WithLabelValues(submitTx.Hash().String()).Observe(float64(encryptionDuration))
 
 	return submitTx, nil
 }
@@ -286,7 +286,7 @@ func (p *Processor) MonitorBalance(ctx context.Context, delayInSeconds int) {
 			return
 
 		case <-timer.C:
-			balance, err := p.Client.BalanceAt(context.Background(), *p.SigningAddress, nil)
+			balance, err := p.Client.BalanceAt(ctx, *p.SigningAddress, nil)
 			if err != nil {
 				utils.Logger.Err(err).Msg("Failed to get balance")
 				continue
@@ -296,13 +296,13 @@ func (p *Processor) MonitorBalance(ctx context.Context, delayInSeconds int) {
 			ethValue := new(big.Float).Quo(new(big.Float).SetInt(balance), big.NewFloat(1e18))
 			balanceInFloat, _ := ethValue.Float64()
 
-			metrics.MetricsERPCBalance.Set(balanceInFloat)
+			metrics.ERPCBalance.Set(balanceInFloat)
 		}
 	}
 }
 
 func returnError(status int, msg error) *EncodingError {
-	metrics.MetricsErrorReturnedCounter.Inc()
+	metrics.ErrorReturnedCounter.Inc()
 	return &EncodingError{
 		StatusCode: status,
 		Err:        msg,

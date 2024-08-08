@@ -69,7 +69,7 @@ func (p *JSONRPCProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	selectedHandler.ServeHTTP(w, r)
 
 	if selectedHandler == p.backend {
-		metrics.MetricsUpstreamRequestDuration.WithLabelValues(rpcreq.Method).Observe(time.Since(startTime).Seconds())
+		metrics.UpstreamRequestDuration.WithLabelValues(rpcreq.Method).Observe(time.Since(startTime).Seconds())
 	}
 }
 

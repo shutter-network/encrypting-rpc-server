@@ -4,7 +4,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var MetricsTotalRequestDuration = prometheus.NewHistogramVec(
+var TotalRequestDuration = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Namespace: "encrypting_rpc_server",
 		Subsystem: "request",
@@ -15,7 +15,7 @@ var MetricsTotalRequestDuration = prometheus.NewHistogramVec(
 	[]string{"encrypted_tx_hash", "tx_hash"},
 )
 
-var MetricsEncryptionDuration = prometheus.NewHistogramVec(
+var EncryptionDuration = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Namespace: "encrypting_rpc_server",
 		Subsystem: "request",
@@ -28,7 +28,7 @@ var MetricsEncryptionDuration = prometheus.NewHistogramVec(
 
 var gasLimitBuckets = []float64{21000, 25000, 35000, 50000, 70000, 100000, 200000, 500000, 1000000, 10000000, 30000000}
 
-var MetricsRequestedGasLimit = prometheus.NewHistogramVec(
+var RequestedGasLimit = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Namespace: "encrypting_rpc_server",
 		Subsystem: "request",
@@ -39,7 +39,7 @@ var MetricsRequestedGasLimit = prometheus.NewHistogramVec(
 	[]string{"encrypted_tx_hash"},
 )
 
-var MetricsUpstreamRequestDuration = prometheus.NewHistogramVec(
+var UpstreamRequestDuration = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Namespace: "encrypting_rpc_server",
 		Subsystem: "upstream_request",
@@ -50,8 +50,8 @@ var MetricsUpstreamRequestDuration = prometheus.NewHistogramVec(
 	[]string{"method"},
 )
 
-var MetricsCancellationTxCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
+var CancellationTxGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
 		Namespace: "encrypting_rpc_server",
 		Subsystem: "request",
 		Name:      "cancellation_txs_total",
@@ -60,7 +60,7 @@ var MetricsCancellationTxCounter = prometheus.NewCounterVec(
 	[]string{"tx_hash"},
 )
 
-var MetricsErrorReturnedCounter = prometheus.NewCounter(
+var ErrorReturnedCounter = prometheus.NewCounter(
 	prometheus.CounterOpts{
 		Namespace: "encrypting_rpc_server",
 		Subsystem: "request",
@@ -69,7 +69,7 @@ var MetricsErrorReturnedCounter = prometheus.NewCounter(
 	},
 )
 
-var MetricsERPCBalance = prometheus.NewGauge(
+var ERPCBalance = prometheus.NewGauge(
 	prometheus.GaugeOpts{
 		Namespace: "encrypting_rpc_server",
 		Subsystem: "balance",
@@ -79,11 +79,11 @@ var MetricsERPCBalance = prometheus.NewGauge(
 )
 
 func InitMetrics() {
-	prometheus.MustRegister(MetricsTotalRequestDuration)
-	prometheus.MustRegister(MetricsEncryptionDuration)
-	prometheus.MustRegister(MetricsRequestedGasLimit)
-	prometheus.MustRegister(MetricsUpstreamRequestDuration)
-	prometheus.MustRegister(MetricsCancellationTxCounter)
-	prometheus.MustRegister(MetricsErrorReturnedCounter)
-	prometheus.MustRegister(MetricsERPCBalance)
+	prometheus.MustRegister(TotalRequestDuration)
+	prometheus.MustRegister(EncryptionDuration)
+	prometheus.MustRegister(RequestedGasLimit)
+	prometheus.MustRegister(UpstreamRequestDuration)
+	prometheus.MustRegister(CancellationTxGauge)
+	prometheus.MustRegister(ErrorReturnedCounter)
+	prometheus.MustRegister(ERPCBalance)
 }
