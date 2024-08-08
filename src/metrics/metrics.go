@@ -64,7 +64,7 @@ var MetricsErrorReturnedCounter = prometheus.NewCounter(
 	prometheus.CounterOpts{
 		Namespace: "encrypting_rpc_server",
 		Subsystem: "request",
-		Name:      "error_returned",
+		Name:      "errors_returned_total",
 		Help:      "Counter of error returned",
 	},
 )
