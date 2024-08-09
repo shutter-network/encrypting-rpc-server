@@ -95,7 +95,7 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 				txHash, err := s.SendRawTransaction(ctx, rawTx)
 
 				if err != nil {
-					metrics.CancellationTxGauge.WithLabelValues(txHash.String()).Dec()
+					metrics.ErrorReturnedGauge.Dec()
 					utils.Logger.Error().Err(err).Msgf("Failed to send transaction.")
 					continue
 				}
@@ -302,7 +302,7 @@ func (p *Processor) MonitorBalance(ctx context.Context, delayInSeconds int) {
 }
 
 func returnError(status int, msg error) *EncodingError {
-	metrics.ErrorReturnedCounter.Inc()
+	metrics.ErrorReturnedGauge.Inc()
 	return &EncodingError{
 		StatusCode: status,
 		Err:        msg,
