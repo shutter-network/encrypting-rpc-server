@@ -95,7 +95,7 @@ func (srv *server) rpcHandler(ctx context.Context) (http.Handler, error) {
 		service.Init(srv.processor, srv.config)
 		go service.SendTimeEvents(ctx, srv.config.DelayInSeconds)
 		if srv.processor.MetricsConfig.Enabled {
-			go srv.processor.MonitorBalance(ctx, srv.config.DelayInSeconds*10)
+			go srv.processor.MonitorBalance(ctx, srv.config.FetchBalanceDelay)
 		}
 		err := rpcServer.RegisterName(service.Name(), service)
 		if err != nil {

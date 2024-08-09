@@ -40,6 +40,7 @@ var Config struct {
 	DelayInSeconds              int    `mapstructure:"delay-in-seconds"`
 	EncryptedGasLimit           uint64 `mapstructure:"encrypted-gas-limit"`
 	MetricsConfig               metrics_server.MetricsConfig
+	FetchBalanceDelay           int `mapstructure:"fetch-balance-delay"`
 }
 
 func Cmd() *cobra.Command {
@@ -147,6 +148,14 @@ func Cmd() *cobra.Command {
 		"metrics port",
 	)
 
+	cmd.PersistentFlags().IntVarP(
+		&Config.FetchBalanceDelay,
+		"fetch-balance-delay",
+		"",
+		10,
+		"delay after which balance of signing address is re recorded",
+	)
+
 	return cmd
 }
 
@@ -225,6 +234,7 @@ func Start() error {
 		HTTPListenAddress: Config.HTTPListenAddress,
 		DelayInSeconds:    Config.DelayInSeconds,
 		EncryptedGasLimit: Config.EncryptedGasLimit,
+		FetchBalanceDelay: Config.FetchBalanceDelay,
 	}
 
 	service := server.NewRPCService(processor, config)
