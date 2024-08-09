@@ -32,6 +32,7 @@ type Config struct {
 	HTTPListenAddress string
 	DelayInSeconds    int
 	EncryptedGasLimit uint64
+	FetchBalanceDelay int
 }
 
 type RPCService interface {

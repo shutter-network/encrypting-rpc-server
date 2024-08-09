@@ -19,6 +19,7 @@ services:
       --metrics-port ${METRICS_PORT}
       --metrics-enabled ${METRICS_ENABLED}
       --metrics-host ${METRICS_HOST}
+      --fetch-balance-delay ${FETCH_BALANCE_DELAY}
     labels:
       caddy: "${SERVICE_DOMAIN_NAME}"
       caddy.@browser: "method GET"
