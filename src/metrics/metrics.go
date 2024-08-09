@@ -60,8 +60,8 @@ var CancellationTxGauge = prometheus.NewGaugeVec(
 	[]string{"tx_hash"},
 )
 
-var ErrorReturnedCounter = prometheus.NewCounter(
-	prometheus.CounterOpts{
+var ErrorReturnedGauge = prometheus.NewGauge(
+	prometheus.GaugeOpts{
 		Namespace: "encrypting_rpc_server",
 		Subsystem: "request",
 		Name:      "errors_returned_total",
@@ -84,6 +84,6 @@ func InitMetrics() {
 	prometheus.MustRegister(RequestedGasLimit)
 	prometheus.MustRegister(UpstreamRequestDuration)
 	prometheus.MustRegister(CancellationTxGauge)
-	prometheus.MustRegister(ErrorReturnedCounter)
+	prometheus.MustRegister(ErrorReturnedGauge)
 	prometheus.MustRegister(ERPCBalance)
 }
