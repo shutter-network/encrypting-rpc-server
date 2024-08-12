@@ -38,6 +38,7 @@ var Config struct {
 	DelayInSeconds              int    `mapstructure:"delay-in-seconds"`
 	EncryptedGasLimit           uint64 `mapstructure:"encrypted-gas-limit"`
 	DbUrl                       string `mapstructure:"dburl"`
+	WaitMinedInterval           int    `mapstructure:"wait-mined-interval"`
 }
 
 func Cmd() *cobra.Command {
@@ -111,6 +112,14 @@ func Cmd() *cobra.Command {
 		"",
 		10,
 		"server cache delay in seconds",
+	)
+
+	cmd.PersistentFlags().IntVarP(
+		&Config.WaitMinedInterval,
+		"wait-mined-interval",
+		"",
+		10,
+		"server wait time for checking tx inclusion in seconds",
 	)
 
 	cmd.PersistentFlags().Uint64VarP(
@@ -207,6 +216,7 @@ func Start() error {
 		HTTPListenAddress: Config.HTTPListenAddress,
 		DelayInSeconds:    Config.DelayInSeconds,
 		EncryptedGasLimit: Config.EncryptedGasLimit,
+		WaitMinedInterval: Config.WaitMinedInterval,
 	}
 
 	service := server.NewRPCService(processor, config, dbInst)

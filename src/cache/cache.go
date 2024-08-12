@@ -15,9 +15,9 @@ type TransactionInfo struct {
 
 type Cache struct {
 	sync.RWMutex
-	Data           map[string]TransactionInfo
-	InclusionCache map[string]*types.Transaction
-	DelayFactor    int64
+	Data                   map[string]TransactionInfo
+	WaitingForReceiptCache map[string]bool
+	DelayFactor            int64
 }
 
 type ProcessTxEntryResp struct {
@@ -27,9 +27,9 @@ type ProcessTxEntryResp struct {
 
 func NewCache(delayFactor int64) *Cache {
 	return &Cache{
-		Data:           make(map[string]TransactionInfo),
-		DelayFactor:    delayFactor,
-		InclusionCache: make(map[string]*types.Transaction),
+		Data:                   make(map[string]TransactionInfo),
+		DelayFactor:            delayFactor,
+		WaitingForReceiptCache: make(map[string]bool),
 	}
 }
 

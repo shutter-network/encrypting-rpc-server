@@ -15,6 +15,7 @@ services:
       --rpc-url ${UPSTREAM_RPC}
       --delay-in-seconds ${DELAY_IN_SECONDS}
       --dbUrl ${DB_URL}
+      --wait-mined-interval ${WAIT_MINED_INTERVAL}
     ports:
       - "8546:8546"
     depends_on:

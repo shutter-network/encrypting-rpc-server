@@ -31,6 +31,7 @@ type Config struct {
 	HTTPListenAddress string
 	DelayInSeconds    int
 	EncryptedGasLimit uint64
+	WaitMinedInterval int
 }
 
 type RPCService interface {

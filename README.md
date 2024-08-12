@@ -29,6 +29,7 @@ To start and build the server within a docker container:
     DELAY_IN_SECONDS=100
     # the db url
     DB_URL="postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable"
+    WAIT_MINED_INTERVAL=10
     ```
 
 4. Build and run the application:
@@ -54,4 +55,5 @@ To start and build the server within a docker container:
     --keyper-set-manager-address 0x6759Ab83de6f7d5bc4cf02d41BbB3Bd1500712E1 \
     --rpc-url https://rpc.chiadochain.net \
     --dbUrl "host=localhost port=5432 user=postgres dbname=postgres password=postgres sslmode=disable"
+    --wait-mined-interval 10
     ```

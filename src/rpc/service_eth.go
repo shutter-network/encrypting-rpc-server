@@ -191,6 +191,12 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		}
 
 		utils.Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
+		key, err := service.Cache.Key(tx)
+		if err != nil {
+			utils.Logger.Debug().Msgf("WaitTillMined | error in generating key | err: %v", err)
+		} else {
+			service.Cache.WaitingForReceiptCache[key] = false
+		}
 		return &txHash, nil
 	}
 
@@ -226,8 +232,8 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		SubmissionTime:  time.Now().Unix(),
 	})
 
-	_ctx, _ := context.WithTimeout(context.Background(), time.Duration(service.Config.DelayInSeconds)*10*time.Second)
-	go service.WaitTillMined(_ctx, tx, service.Config.DelayInSeconds)
+	_ctx, _ := context.WithTimeout(context.Background(), time.Duration(service.Config.WaitMinedInterval)*10*time.Second)
+	go service.WaitTillMined(_ctx, tx, service.Config.WaitMinedInterval)
 
 	return &txHash, nil
 }
@@ -284,44 +290,54 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 	return submitTx, nil
 }
 
-func (s *EthService) WaitTillMined(ctx context.Context, tx *types.Transaction, delayInSeconds int) {
+func (s *EthService) WaitTillMined(ctx context.Context, tx *types.Transaction, waitMinedInterval int) {
 	key, err := s.Cache.Key(tx)
 	if err != nil {
 		utils.Logger.Debug().Msgf("WaitTillMined | error in generating key | err: %v", err)
 		return
 	}
-	value := s.Cache.InclusionCache[key]
+	value := s.Cache.WaitingForReceiptCache[key]
 
-	if value == nil {
-		queryTicker := time.NewTicker(time.Duration(delayInSeconds) * 2 * time.Second)
+	if !value {
+		queryTicker := time.NewTicker(time.Duration(waitMinedInterval) * time.Second)
 		defer queryTicker.Stop()
-		s.Cache.InclusionCache[key] = tx
+		s.Cache.WaitingForReceiptCache[key] = true
 		utils.Logger.Info().Msgf("New tx recorded to check for inclusion | txHash: %s", tx.Hash().String())
 
 		for {
-			receipt, err := s.Processor.Client.TransactionReceipt(ctx, tx.Hash())
-			if err == nil {
-				delete(s.Cache.InclusionCache, key)
-				block, err := s.Processor.Client.BlockByHash(ctx, receipt.BlockHash)
-				if err != nil {
-					utils.Logger.Debug().Msgf("Error getting block | blockHash: %s", receipt.BlockHash.String())
+			if s.Cache.WaitingForReceiptCache[key] {
+				receipt, err := s.Processor.Client.TransactionReceipt(ctx, tx.Hash())
+				if err == nil {
+					delete(s.Cache.WaitingForReceiptCache, key)
+					block, err := s.Processor.Client.BlockByHash(ctx, receipt.BlockHash)
+					if err != nil {
+						utils.Logger.Debug().Msgf("Error getting block | blockHash: %s", receipt.BlockHash.String())
+						return
+					}
+					s.Processor.Db.FinaliseTx(db.TransactionDetails{
+						TxHash:        tx.Hash().String(),
+						InclusionTime: block.Time(),
+					})
 					return
 				}
+
+				if errors.Is(err, ethereum.NotFound) {
+					utils.Logger.Debug().Msgf("Transaction not yet mined | txHash: %s", tx.Hash().String())
+				} else {
+					delete(s.Cache.WaitingForReceiptCache, key)
+					utils.Logger.Debug().Msgf("receipt retrieval failed | txHash: %s | err: %W", tx.Hash().String(), err)
+					return
+				}
+
+			} else {
+				// return if tx is explicitely set to not check now
 				s.Processor.Db.FinaliseTx(db.TransactionDetails{
 					TxHash:        tx.Hash().String(),
-					InclusionTime: block.Time(),
+					InclusionTime: uint64(time.Now().Unix()),
+					IsCancelled:   true,
 				})
 				return
 			}
-
-			if errors.Is(err, ethereum.NotFound) {
-				utils.Logger.Debug().Msgf("Transaction not yet mined | txHash: %s", tx.Hash().String())
-			} else {
-				delete(s.Cache.InclusionCache, key)
-				utils.Logger.Debug().Msgf("receipt retrieval failed | txHash: %s | err: %W", tx.Hash().String(), err)
-				return
-			}
-
 			// Wait for the next round.
 			select {
 			case <-ctx.Done():
