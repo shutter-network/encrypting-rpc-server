@@ -7,6 +7,7 @@ services:
       context: ../
     env_file: .env
     ports:
+      - "8546:8546"
       - 4000:4000
     command: >
       start
@@ -22,8 +23,6 @@ services:
       --fetch-balance-delay ${FETCH_BALANCE_DELAY}
       --dbUrl ${DB_URL}
       --wait-mined-interval ${WAIT_MINED_INTERVAL}
-    ports:
-      - "8546:8546"
     depends_on:
       - postgres
     labels:

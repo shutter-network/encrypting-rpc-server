@@ -135,13 +135,13 @@ func Cmd() *cobra.Command {
 		"encrypted gas limit",
 	)
 
-
 	cmd.PersistentFlags().StringVarP(
 		&Config.DbUrl,
 		"dbUrl",
 		"",
 		"",
 		"database url to connect to postgres database",
+	)
 
 	cmd.PersistentFlags().BoolVarP(
 		&Config.MetricsConfig.Enabled,
