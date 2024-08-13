@@ -236,8 +236,8 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		SubmissionTime:  time.Now().Unix(),
 	})
 
-	_ctx, _ := context.WithTimeout(context.Background(), time.Duration(service.Config.WaitMinedInterval)*10*time.Second)
-	go service.WaitTillMined(_ctx, tx, service.Config.WaitMinedInterval)
+	_ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(service.Config.WaitMinedInterval)*10*time.Second)
+	go service.WaitTillMined(_ctx, cancelFunc, tx, service.Config.WaitMinedInterval)
 
 	metrics.RequestedGasLimit.WithLabelValues(submitTx.Hash().String()).Observe(float64(tx.Gas()))
 	metrics.TotalRequestDuration.WithLabelValues(submitTx.Hash().String(), txHash.String()).Observe(float64(time.Since(timeBefore).Seconds()))
@@ -303,7 +303,7 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 	return submitTx, nil
 }
 
-func (s *EthService) WaitTillMined(ctx context.Context, tx *types.Transaction, waitMinedInterval int) {
+func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.CancelFunc, tx *types.Transaction, waitMinedInterval int) {
 	key, err := s.Cache.Key(tx)
 	if err != nil {
 		utils.Logger.Debug().Msgf("WaitTillMined | error in generating key | err: %v", err)
@@ -339,7 +339,7 @@ func (s *EthService) WaitTillMined(ctx context.Context, tx *types.Transaction, w
 				} else {
 					delete(s.Cache.WaitingForReceiptCache, key)
 					utils.Logger.Debug().Msgf("receipt retrieval failed | txHash: %s | err: %W", tx.Hash().String(), err)
-					return
+					cancelFunc()
 				}
 
 			} else {
