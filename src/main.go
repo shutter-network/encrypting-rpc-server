@@ -8,8 +8,11 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/shutter-network/encrypting-rpc-server/db"
+	"github.com/shutter-network/encrypting-rpc-server/metrics"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/metricsserver"
+	metrics_server "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/metricsserver"
 	medleyService "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 
 	"crypto/ecdsa"
@@ -39,6 +42,8 @@ var Config struct {
 	EncryptedGasLimit           uint64 `mapstructure:"encrypted-gas-limit"`
 	DbUrl                       string `mapstructure:"dburl"`
 	WaitMinedInterval           int    `mapstructure:"wait-mined-interval"`
+	MetricsConfig               metrics_server.MetricsConfig
+	FetchBalanceDelay           int `mapstructure:"fetch-balance-delay"`
 }
 
 func Cmd() *cobra.Command {
@@ -130,12 +135,44 @@ func Cmd() *cobra.Command {
 		"encrypted gas limit",
 	)
 
+
 	cmd.PersistentFlags().StringVarP(
 		&Config.DbUrl,
 		"dbUrl",
 		"",
 		"",
 		"database url to connect to postgres database",
+
+	cmd.PersistentFlags().BoolVarP(
+		&Config.MetricsConfig.Enabled,
+		"metrics-enabled",
+		"",
+		false,
+		"to enable promnetheus metrics",
+	)
+
+	cmd.PersistentFlags().StringVarP(
+		&Config.MetricsConfig.Host,
+		"metrics-host",
+		"",
+		"localhost",
+		"metrics host",
+	)
+
+	cmd.PersistentFlags().Uint16VarP(
+		&Config.MetricsConfig.Port,
+		"metrics-port",
+		"",
+		9090,
+		"metrics port",
+	)
+
+	cmd.PersistentFlags().IntVarP(
+		&Config.FetchBalanceDelay,
+		"fetch-balance-delay",
+		"",
+		10,
+		"delay after which balance of signing address is re recorded",
 	)
 
 	return cmd
@@ -203,6 +240,7 @@ func Start() error {
 		SequencerContract:        sequencerContract,
 		KeyperSetManagerContract: keyperSetManagerContract,
 		Db:                       dbInst,
+		MetricsConfig:            &Config.MetricsConfig,
 	}
 
 	backendURL := &url.URL{}
@@ -211,12 +249,18 @@ func Start() error {
 		utils.Logger.Fatal().Err(err).Msg("failed to parse RPCUrl")
 	}
 
+	if Config.MetricsConfig.Enabled {
+		metrics.InitMetrics()
+		processor.MetricsServer = metricsserver.New(&Config.MetricsConfig)
+	}
+
 	config := rpc.Config{
 		BackendURL:        backendURL,
 		HTTPListenAddress: Config.HTTPListenAddress,
 		DelayInSeconds:    Config.DelayInSeconds,
 		EncryptedGasLimit: Config.EncryptedGasLimit,
 		WaitMinedInterval: Config.WaitMinedInterval,
+		FetchBalanceDelay: Config.FetchBalanceDelay,
 	}
 
 	service := server.NewRPCService(processor, config, dbInst)

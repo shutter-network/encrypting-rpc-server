@@ -6,6 +6,8 @@ services:
     build:
       context: ../
     env_file: .env
+    ports:
+      - 4000:4000
     command: >
       start
       --signing-key ${SIGNING_KEY}
@@ -14,6 +16,10 @@ services:
       --keyper-set-manager-address ${KEYPER_SET_MANAGER_CONTRACT_ADDRESS}
       --rpc-url ${UPSTREAM_RPC}
       --delay-in-seconds ${DELAY_IN_SECONDS}
+      --metrics-port ${METRICS_PORT}
+      --metrics-enabled ${METRICS_ENABLED}
+      --metrics-host ${METRICS_HOST}
+      --fetch-balance-delay ${FETCH_BALANCE_DELAY}
       --dbUrl ${DB_URL}
       --wait-mined-interval ${WAIT_MINED_INTERVAL}
     ports:
@@ -55,3 +61,8 @@ services:
       timeout: 5s
       retries: 5
 
+  node_exporter:
+    image: prom/node-exporter:latest
+    container_name: my_node_exporter
+    ports:
+      - "9100:9100"

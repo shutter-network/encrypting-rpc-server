@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/shutter-network/encrypting-rpc-server/db"
+	"github.com/shutter-network/encrypting-rpc-server/metrics"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 
 	ethrpc "github.com/ethereum/go-ethereum/rpc"
@@ -64,7 +65,13 @@ func (p *JSONRPCProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// make the body available again before letting reverse proxy handle the rest
 	r.Body = io.NopCloser(bytes.NewBuffer(body))
+	startTime := time.Now()
+
 	selectedHandler.ServeHTTP(w, r)
+
+	if selectedHandler == p.backend {
+		metrics.UpstreamRequestDuration.WithLabelValues(rpcreq.Method).Observe(time.Since(startTime).Seconds())
+	}
 }
 
 type server struct {
@@ -90,6 +97,9 @@ func (srv *server) rpcHandler(ctx context.Context) (http.Handler, error) {
 	for _, service := range rpcServices {
 		service.Init(srv.processor, srv.config)
 		go service.SendTimeEvents(ctx, srv.config.DelayInSeconds)
+		if srv.processor.MetricsConfig.Enabled {
+			go srv.processor.MonitorBalance(ctx, srv.config.FetchBalanceDelay)
+		}
 		err := rpcServer.RegisterName(service.Name(), service)
 		if err != nil {
 			return nil, errors.Wrap(err, "error while trying to register RPCService")
@@ -126,7 +136,13 @@ func (srv *server) Start(ctx context.Context, runner medleyService.Runner) error
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+  
 	go srv.postgresDatabase.Start(ctx)
+	if srv.processor.MetricsConfig.Enabled {
+		if err := runner.StartService(srv.processor.MetricsServer); err != nil {
+			return err
+		}
+	}
 	runner.Go(httpServer.ListenAndServe)
 	runner.Go(func() error {
 		<-ctx.Done()

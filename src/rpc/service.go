@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/shutter-network/encrypting-rpc-server/db"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/metricsserver"
 )
 
 type Processor struct {
@@ -24,6 +25,8 @@ type Processor struct {
 	SequencerContract        SequencerContract
 	KeyperSetManagerContract KeyperSetManagerContract
 	Db                       *db.PostgresDb
+	MetricsServer            *metricsserver.MetricsServer
+	MetricsConfig            *metricsserver.MetricsConfig
 }
 
 type Config struct {
@@ -32,6 +35,7 @@ type Config struct {
 	DelayInSeconds    int
 	EncryptedGasLimit uint64
 	WaitMinedInterval int
+	FetchBalanceDelay int
 }
 
 type RPCService interface {
