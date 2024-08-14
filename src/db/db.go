@@ -16,13 +16,13 @@ func (db *PostgresDb) FinaliseTx(receipt TransactionDetails) {
 }
 
 func (db *PostgresDb) Start(ctx context.Context) {
+	sqlDb, err := db.DB.DB()
+	if err != nil {
+		utils.Logger.Info().Msgf("cannot initiate sqlDb | err: %v", err)
+		panic(fmt.Sprintf("cannot initiate sqlDb | err: %v", err))
+	}
+	defer sqlDb.Close()
 	for {
-		sqlDb, err := db.DB.DB()
-		if err != nil {
-			utils.Logger.Info().Msgf("cannot initiate sqlDb | err: %v", err)
-			panic(fmt.Sprintf("cannot initiate sqlDb | err: %v", err))
-		}
-		defer sqlDb.Close()
 
 		select {
 		case txDetails := <-db.addTxCh:
