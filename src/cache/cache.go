@@ -45,6 +45,7 @@ func (c *Cache) Key(tx *types.Transaction) (string, error) {
 func (c *Cache) UpdateEntry(key string, tx *types.Transaction, cachedTime int64) {
 	txInfo := TransactionInfo{Tx: tx, CachedTime: cachedTime}
 	c.Data[key] = txInfo
+	c.WaitingForReceiptCache[key] = true
 	utils.Logger.Debug().Msgf("Cache entry at key [%s] updated to: Tx = [%s] and CachedTime = [%d]",
 		key, c.Data[key].Tx.Hash().Hex(), c.Data[key].CachedTime)
 }

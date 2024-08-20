@@ -81,6 +81,7 @@ func (s *EthService) SendTimeEvents(ctx context.Context, delayInSeconds int) err
 	}
 }
 
+// TODO: this needs to be tested
 func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 	utils.Logger.Info().Msg(fmt.Sprintf("Received new time event: %d", newTime))
 	for key, info := range s.Cache.Data {
@@ -89,22 +90,56 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 			delete(s.Cache.Data, key)
 
 			if info.Tx != nil {
-				utils.Logger.Debug().Msgf("Sending transaction [%s]", info.Tx.Hash().Hex())
-				rawTxBytes, err := info.Tx.MarshalBinary()
-				if err != nil {
-					utils.Logger.Error().Err(err).Msg("Failed to marshal data")
-				}
+				if s.Cache.WaitingForReceiptCache[key] {
+					// utils.Logger.Debug().Msgf("Sending transaction [%s]", info.Tx.Hash().Hex())
+					utils.Logger.Debug().Msgf("Checking for tx inclusion [%s]", info.Tx.Hash().Hex())
+					receipt, err := s.Processor.Client.TransactionReceipt(ctx, info.Tx.Hash())
+					if err == nil {
+						delete(s.Cache.WaitingForReceiptCache, key)
+						block, err := s.Processor.Client.BlockByHash(ctx, receipt.BlockHash)
+						if err != nil {
+							utils.Logger.Debug().Msgf("Error getting block | blockHash: %s", receipt.BlockHash.String())
+							continue
+						}
+						s.Processor.Db.FinaliseTx(db.TransactionDetails{
+							TxHash:        info.Tx.Hash().String(),
+							InclusionTime: block.Time(),
+						})
+						continue
+					}
 
-				rawTx := "0x" + common.Bytes2Hex(rawTxBytes)
-				txHash, err := s.SendRawTransaction(ctx, rawTx)
+					if errors.Is(err, ethereum.NotFound) {
+						utils.Logger.Debug().Msgf("Transaction not yet mined | txHash: %s", info.Tx.Hash().String())
+						rawTxBytes, err := info.Tx.MarshalBinary()
+						if err != nil {
+							utils.Logger.Error().Err(err).Msg("Failed to marshal data")
+						}
 
-				if err != nil {
-					metrics.ErrorReturnedGauge.Dec()
-					utils.Logger.Error().Err(err).Msgf("Failed to send transaction.")
+						rawTx := "0x" + common.Bytes2Hex(rawTxBytes)
+
+						txHash, err := s.SendRawTransaction(ctx, rawTx)
+
+						if err != nil {
+							metrics.ErrorReturnedGauge.Dec()
+							utils.Logger.Error().Err(err).Msgf("Failed to send transaction.")
+							continue
+						}
+						utils.Logger.Info().Msg("Transaction sent internally: " + txHash.Hex())
+
+					} else {
+						delete(s.Cache.WaitingForReceiptCache, key)
+						utils.Logger.Debug().Msgf("receipt retrieval failed | txHash: %s | err: %W", info.Tx.Hash().String(), err)
+					}
+
+				} else {
+					// continue if tx is explicitely set to not check from now on
+					s.Processor.Db.FinaliseTx(db.TransactionDetails{
+						TxHash:        info.Tx.Hash().String(),
+						InclusionTime: uint64(time.Now().Unix()),
+						IsCancelled:   true,
+					})
 					continue
 				}
-
-				utils.Logger.Info().Msg("Transaction sent internally: " + txHash.Hex())
 			}
 		}
 	}
@@ -198,8 +233,10 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		utils.Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
 		key, err := service.Cache.Key(tx)
 		if err != nil {
-			utils.Logger.Debug().Msgf("WaitTillMined | error in generating key | err: %v", err)
+			utils.Logger.Debug().Msgf("SendRawTransaction | error in generating key | err: %v", err)
 		} else {
+
+			// TODO: cancellation tx will not be handled correctly here
 			service.Cache.WaitingForReceiptCache[key] = false
 		}
 		return &txHash, nil
@@ -237,8 +274,8 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		SubmissionTime:  time.Now().Unix(),
 	})
 
-	_ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(service.Config.WaitMinedInterval)*10*time.Second)
-	go service.WaitTillMined(_ctx, cancelFunc, tx, service.Config.WaitMinedInterval)
+	// _ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(service.Config.WaitMinedInterval)*10*time.Second)
+	// go service.WaitTillMined(_ctx, cancelFunc, tx, service.Config.WaitMinedInterval)
 
 	metrics.RequestedGasLimit.WithLabelValues(submitTx.Hash().String()).Observe(float64(tx.Gas()))
 	metrics.TotalRequestDuration.WithLabelValues(submitTx.Hash().String(), txHash.String()).Observe(float64(time.Since(timeBefore).Seconds()))
