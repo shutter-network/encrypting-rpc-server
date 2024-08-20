@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/rs/zerolog/log"
+	"github.com/shutter-network/encrypting-rpc-server/db"
 	"github.com/shutter-network/encrypting-rpc-server/metrics"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
@@ -39,6 +40,8 @@ var Config struct {
 	KeyperSetManagerAddress     string `mapstructure:"keyperset-manager-address"`
 	DelayInSeconds              int    `mapstructure:"delay-in-seconds"`
 	EncryptedGasLimit           uint64 `mapstructure:"encrypted-gas-limit"`
+	DbUrl                       string `mapstructure:"dburl"`
+	WaitMinedInterval           int    `mapstructure:"wait-mined-interval"`
 	MetricsConfig               metrics_server.MetricsConfig
 	FetchBalanceDelay           int `mapstructure:"fetch-balance-delay"`
 }
@@ -116,12 +119,28 @@ func Cmd() *cobra.Command {
 		"server cache delay in seconds",
 	)
 
+	cmd.PersistentFlags().IntVarP(
+		&Config.WaitMinedInterval,
+		"wait-mined-interval",
+		"",
+		10,
+		"server wait time for checking tx inclusion in seconds",
+	)
+
 	cmd.PersistentFlags().Uint64VarP(
 		&Config.EncryptedGasLimit,
 		"encrypted-gas-limit",
 		"",
 		1000000,
 		"encrypted gas limit",
+	)
+
+	cmd.PersistentFlags().StringVarP(
+		&Config.DbUrl,
+		"dbUrl",
+		"",
+		"",
+		"database url to connect to postgres database",
 	)
 
 	cmd.PersistentFlags().BoolVarP(
@@ -205,6 +224,11 @@ func Start() error {
 		utils.Logger.Fatal().Err(err).Msg("can not use Sequencer contract")
 	}
 
+	dbInst, err := db.InitialMigration(Config.DbUrl)
+	if err != nil {
+		utils.Logger.Fatal().Err(err).Msg("can not instantiate postgres")
+	}
+
 	processor := rpc.Processor{
 		URL:                      Config.HTTPListenAddress,
 		RPCUrl:                   Config.RPCUrl,
@@ -215,6 +239,7 @@ func Start() error {
 		KeyBroadcastContract:     broadcastContract,
 		SequencerContract:        sequencerContract,
 		KeyperSetManagerContract: keyperSetManagerContract,
+		Db:                       dbInst,
 		MetricsConfig:            &Config.MetricsConfig,
 	}
 
@@ -234,10 +259,11 @@ func Start() error {
 		HTTPListenAddress: Config.HTTPListenAddress,
 		DelayInSeconds:    Config.DelayInSeconds,
 		EncryptedGasLimit: Config.EncryptedGasLimit,
+		WaitMinedInterval: Config.WaitMinedInterval,
 		FetchBalanceDelay: Config.FetchBalanceDelay,
 	}
 
-	service := server.NewRPCService(processor, config)
+	service := server.NewRPCService(processor, config, dbInst)
 	utils.Logger.Info().Str("listen-on", Config.HTTPListenAddress).Msg("Serving JSON-RPC")
 
 	func() {

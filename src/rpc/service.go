@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/shutter-network/encrypting-rpc-server/db"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/metricsserver"
 )
@@ -23,6 +24,7 @@ type Processor struct {
 	KeyBroadcastContract     KeyBroadcastContract
 	SequencerContract        SequencerContract
 	KeyperSetManagerContract KeyperSetManagerContract
+	Db                       *db.PostgresDb
 	MetricsServer            *metricsserver.MetricsServer
 	MetricsConfig            *metricsserver.MetricsConfig
 }
@@ -32,6 +34,7 @@ type Config struct {
 	HTTPListenAddress string
 	DelayInSeconds    int
 	EncryptedGasLimit uint64
+	WaitMinedInterval int
 	FetchBalanceDelay int
 }
 
@@ -53,6 +56,7 @@ type EthereumClient interface {
 	CodeAt(ctx context.Context, account common.Address, blockNumber *big.Int) ([]byte, error)
 	NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error)
 	BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error)
+	BlockByHash(ctx context.Context, hash common.Hash) (*types.Block, error)
 }
 
 type KeyperSetManagerContract interface {
@@ -105,4 +109,8 @@ func (w *EthClientWrapper) NonceAt(ctx context.Context, account common.Address, 
 
 func (w *EthClientWrapper) BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
 	return w.Client.BalanceAt(ctx, account, blockNumber)
+}
+
+func (w *EthClientWrapper) BlockByHash(ctx context.Context, hash common.Hash) (*types.Block, error) {
+	return w.Client.BlockByHash(ctx, hash)
 }

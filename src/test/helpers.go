@@ -4,12 +4,21 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/json"
+	"io"
+	"os"
+	"os/exec"
+	"strings"
+	"testing"
+
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/rs/zerolog/log"
+	"github.com/shutter-network/encrypting-rpc-server/db"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/server"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
@@ -19,11 +28,10 @@ import (
 	medleyKeygen "github.com/shutter-network/rolling-shutter/rolling-shutter/medley/testkeygen"
 	shopContractBindings "github.com/shutter-network/shop-contracts/bindings"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
-	"io"
-	"os"
-	"os/exec"
-	"strings"
-	"testing"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	gorm_logger "gorm.io/gorm/logger"
 )
 
 func init() {
@@ -229,7 +237,8 @@ func SetupServer(ctx context.Context, t *testing.T) error {
 		BackendURL:        backendUrl,
 		HTTPListenAddress: processor.URL,
 	}
-	service := server.NewRPCService(processor, config)
+	db, _ := db.InitialMigration("")
+	service := server.NewRPCService(processor, config, db)
 	go func() {
 		err := medleyService.Run(ctx, service)
 		if err != nil {
@@ -237,4 +246,29 @@ func SetupServer(ctx context.Context, t *testing.T) error {
 		}
 	}()
 	return nil
+}
+
+// NewTestDB creates a new in-memory SQLite database instance for testing purposes.
+func NewPostgresTestDB(t *testing.T) (sqlmock.Sqlmock, *db.PostgresDb) {
+
+	var (
+		mockDb *sql.DB
+		mock   sqlmock.Sqlmock
+		err    error
+	)
+
+	// Create a new database connection
+	mockDb, mock, err = sqlmock.New()
+	require.NoError(t, err)
+
+	gormConfig := &gorm.Config{Logger: gorm_logger.Default.LogMode(gorm_logger.Silent)}
+
+	dialector := postgres.New(postgres.Config{
+		Conn:       mockDb,
+		DriverName: "postgres",
+	})
+	testDb, err := gorm.Open(dialector, gormConfig)
+	require.NoError(t, err)
+
+	return mock, &db.PostgresDb{DB: testDb}
 }

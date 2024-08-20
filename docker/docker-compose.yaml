@@ -7,6 +7,7 @@ services:
       context: ../
     env_file: .env
     ports:
+      - "8546:8546"
       - 4000:4000
     command: >
       start
@@ -20,6 +21,10 @@ services:
       --metrics-enabled ${METRICS_ENABLED}
       --metrics-host ${METRICS_HOST}
       --fetch-balance-delay ${FETCH_BALANCE_DELAY}
+      --dbUrl ${DB_URL}
+      --wait-mined-interval ${WAIT_MINED_INTERVAL}
+    depends_on:
+      - postgres
     labels:
       caddy: "${SERVICE_DOMAIN_NAME}"
       caddy.@browser: "method GET"
@@ -40,6 +45,20 @@ services:
       - 443:443
     labels:
       caddy.email: "devops@brainbot.com"
+
+  postgres:
+    image: postgres:14-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: "postgres"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   node_exporter:
     image: prom/node-exporter:latest

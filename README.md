@@ -32,3 +32,5 @@ There are other options you can use like:
 * `http-listen-address`: Which address this server runs. Default: :8546
 * `keyper-set-change-look-ahead`: How much ahead your transactions should be revealed.
 * For running the server with prometheus metrics enabled, use `metrics-port`, `metrics-host` and `metrics-port`
+* `wait-mined-interval` can be used to update the time delay for inclusion checks.
+* `dbUrl` it is the url of postgres database, to record transactions and encrypted transactions.

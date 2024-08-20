@@ -2,10 +2,11 @@ package cache
 
 import (
 	"fmt"
-	"github.com/shutter-network/encrypting-rpc-server/testdata"
 	"math/big"
 	"sync"
 	"testing"
+
+	"github.com/shutter-network/encrypting-rpc-server/testdata"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -61,7 +62,7 @@ func TestCache_ProcessTxEntry(t *testing.T) {
 
 	sendStatus, err := c.ProcessTxEntry(signedTx, 100)
 	assert.NoError(t, err, "Failed to update entry")
-	assert.True(t, sendStatus, "Expected transaction send status to be true")
+	assert.True(t, sendStatus.SendStatus, "Expected transaction send status to be true")
 
 	key, err := c.Key(signedTx)
 	assert.NoError(t, err, "Failed to get key from cache")
@@ -94,7 +95,7 @@ func TestCache_ConcurrentUpdateEntry(t *testing.T) {
 		currentBlock := int64(1)
 		executed, err := c.ProcessTxEntry(newTx, currentBlock)
 		assert.Nil(t, err)
-		assert.True(t, executed)
+		assert.True(t, executed.SendStatus)
 	}()
 
 	go func() {
@@ -104,7 +105,7 @@ func TestCache_ConcurrentUpdateEntry(t *testing.T) {
 		currentBlock := int64(2)
 		executed, err := c.ProcessTxEntry(newTx, currentBlock)
 		assert.Nil(t, err)
-		assert.True(t, executed)
+		assert.True(t, executed.SendStatus)
 	}()
 	wg.Wait()
 
