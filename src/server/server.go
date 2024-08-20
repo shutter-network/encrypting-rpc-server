@@ -88,7 +88,7 @@ func NewRPCService(processor rpc.Processor, config rpc.Config, pgDb *db.Postgres
 	}
 }
 
-func (srv *server) rpcHandler(ctx context.Context) (http.Handler, error) {
+func (srv *server) rpcHandler(ctx context.Context) (http.Handler, *[]rpc.RPCService, error) {
 	rpcServices := []rpc.RPCService{
 		&rpc.EthService{},
 	}
@@ -96,13 +96,9 @@ func (srv *server) rpcHandler(ctx context.Context) (http.Handler, error) {
 	rpcServer := ethrpc.NewServer()
 	for _, service := range rpcServices {
 		service.Init(srv.processor, srv.config)
-		go service.SendTimeEvents(ctx, srv.config.DelayInSeconds)
-		if srv.processor.MetricsConfig.Enabled {
-			go srv.processor.MonitorBalance(ctx, srv.config.FetchBalanceDelay)
-		}
 		err := rpcServer.RegisterName(service.Name(), service)
 		if err != nil {
-			return nil, errors.Wrap(err, "error while trying to register RPCService")
+			return nil, nil, errors.Wrap(err, "error while trying to register RPCService")
 		}
 	}
 
@@ -110,23 +106,23 @@ func (srv *server) rpcHandler(ctx context.Context) (http.Handler, error) {
 		backend:   NewReverseProxy(srv.config.BackendURL),
 		processor: rpcServer,
 	}
-	return p, nil
+	return p, &rpcServices, nil
 }
 
-func (srv *server) setupRouter(ctx context.Context) (*chi.Mux, error) {
+func (srv *server) setupRouter(ctx context.Context) (*chi.Mux, *[]rpc.RPCService, error) {
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
-	handler, err := srv.rpcHandler(ctx)
+	handler, services, err := srv.rpcHandler(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	router.Mount("/", handler)
-	return router, nil
+	return router, services, nil
 }
 
 func (srv *server) Start(ctx context.Context, runner medleyService.Runner) error {
-	handler, err := srv.setupRouter(ctx)
+	handler, services, err := srv.setupRouter(ctx)
 
 	if err != nil {
 		return err
@@ -136,8 +132,17 @@ func (srv *server) Start(ctx context.Context, runner medleyService.Runner) error
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-  
-	go srv.postgresDatabase.Start(ctx)
+	runner.Go(func() error {
+		srv.postgresDatabase.Start(ctx)
+		return nil
+	})
+
+	for _, service := range *services {
+		if err := runner.StartService(service); err != nil {
+			return err
+		}
+	}
+
 	if srv.processor.MetricsConfig.Enabled {
 		if err := runner.StartService(srv.processor.MetricsServer); err != nil {
 			return err

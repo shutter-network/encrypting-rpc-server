@@ -22,6 +22,7 @@ import (
 	"github.com/shutter-network/encrypting-rpc-server/metrics"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 )
 
@@ -61,14 +62,14 @@ func (s *EthService) Name() string {
 	return "eth"
 }
 
-func (s *EthService) SendTimeEvents(ctx context.Context, delayInSeconds int) {
+func (s *EthService) SendTimeEvents(ctx context.Context, delayInSeconds int) error {
 	timer := time.NewTicker(time.Duration(delayInSeconds) * time.Second)
 
 	for {
 		select {
 		case <-ctx.Done():
 			utils.Logger.Info().Msg("Stopping because context is done.")
-			return
+			return nil
 
 		case tickTime := <-timer.C:
 			newTime := tickTime.Unix()
@@ -361,17 +362,17 @@ func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.Cance
 	}
 }
 
-func (p *Processor) MonitorBalance(ctx context.Context, delayInSeconds int) {
+func (s *EthService) monitorBalance(ctx context.Context, delayInSeconds int) error {
 	timer := time.NewTicker(time.Duration(delayInSeconds) * time.Second)
 
 	for {
 		select {
 		case <-ctx.Done():
 			utils.Logger.Info().Msg("Stopping because context is done.")
-			return
+			return ctx.Err()
 
 		case <-timer.C:
-			balance, err := p.Client.BalanceAt(ctx, *p.SigningAddress, nil)
+			balance, err := s.Processor.Client.BalanceAt(ctx, *s.Processor.SigningAddress, nil)
 			if err != nil {
 				utils.Logger.Err(err).Msg("Failed to get balance")
 				continue
@@ -392,4 +393,16 @@ func returnError(status int, msg error) *EncodingError {
 		StatusCode: status,
 		Err:        msg,
 	}
+}
+
+func (s *EthService) Start(ctx context.Context, group service.Runner) error {
+	group.Go(func() error {
+		return s.SendTimeEvents(ctx, s.Config.DelayInSeconds)
+	})
+	if s.Processor.MetricsConfig.Enabled {
+		group.Go(func() error {
+			return s.monitorBalance(ctx, s.Config.FetchBalanceDelay)
+		})
+	}
+	return nil
 }
