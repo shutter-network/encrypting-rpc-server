@@ -199,7 +199,17 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		if err != nil {
 			utils.Logger.Debug().Msgf("WaitTillMined | error in generating key | err: %v", err)
 		} else {
-			service.Cache.WaitingForReceiptCache[key] = false
+			delete(service.Cache.WaitingForReceiptCache, key)
+			// updating cache to delay retry until cancellation tx is mined
+			service.Cache.UpdateEntry(key, service.Cache.Data[key].Tx, time.Now().Unix())
+
+			//updating based on sender address and nonce as the txHash here would be different
+			service.Processor.Db.FinaliseTx(db.TransactionDetails{
+				Address:       fromAddress.String(),
+				Nonce:         tx.Nonce(),
+				InclusionTime: uint64(time.Now().Unix()),
+				IsCancelled:   true,
+			})
 		}
 		return &txHash, nil
 	}
@@ -316,7 +326,10 @@ func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.Cance
 		defer queryTicker.Stop()
 		s.Cache.WaitingForReceiptCache[key] = true
 		utils.Logger.Info().Msgf("New tx recorded to check for inclusion | txHash: %s", tx.Hash().String())
-
+		fromAddress, err := utils.SenderAddress(tx)
+		if err != nil {
+			return
+		}
 		for {
 			if s.Cache.WaitingForReceiptCache[key] {
 				receipt, err := s.Processor.Client.TransactionReceipt(ctx, tx.Hash())
@@ -327,7 +340,10 @@ func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.Cance
 						utils.Logger.Debug().Msgf("Error getting block | blockHash: %s", receipt.BlockHash.String())
 						return
 					}
+
 					s.Processor.Db.FinaliseTx(db.TransactionDetails{
+						Address:       fromAddress.String(),
+						Nonce:         tx.Nonce(),
 						TxHash:        tx.Hash().String(),
 						InclusionTime: block.Time(),
 					})
@@ -343,17 +359,13 @@ func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.Cance
 				}
 
 			} else {
-				// return if tx is explicitely set to not check now
-				s.Processor.Db.FinaliseTx(db.TransactionDetails{
-					TxHash:        tx.Hash().String(),
-					InclusionTime: uint64(time.Now().Unix()),
-					IsCancelled:   true,
-				})
+				// return if tx is explicitely set to not check
 				return
 			}
 			// Wait for the next round.
 			select {
 			case <-ctx.Done():
+				// not deleting cache here as the retry mechanism does not stop with timeout
 				return
 			case <-queryTicker.C:
 			}

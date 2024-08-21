@@ -9,11 +9,11 @@ func (db *PostgresDb) updateInclusion(txDetails TransactionDetails) error {
 		// Subquery to count rows with the same TxHash
 		subQuery := tx.Model(&TransactionDetails{}).
 			Select("COUNT(*) - 1").
-			Where("tx_hash = ? AND encrypted_tx_hash IS NOT NULL AND encrypted_tx_hash <> ''", txDetails.TxHash)
+			Where("address = ? AND nonce = ? AND encrypted_tx_hash IS NOT NULL AND encrypted_tx_hash <> ''", txDetails.Address, txDetails.Nonce)
 
 		// Update all rows with new inclusion_time and retries count
 		if err := tx.Model(&TransactionDetails{}).
-			Where("tx_hash = ?", txDetails.TxHash).
+			Where("address = ? AND nonce = ?", txDetails.Address, txDetails.Nonce).
 			Updates(map[string]interface{}{
 				"inclusion_time": txDetails.InclusionTime,
 				"retries":        gorm.Expr("(?)", subQuery),
