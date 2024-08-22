@@ -195,22 +195,10 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 
 		metrics.CancellationTxGauge.WithLabelValues(txHash.String()).Inc()
 		utils.Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
-		key, err := service.Cache.Key(tx)
-		if err != nil {
-			utils.Logger.Debug().Msgf("WaitTillMined | error in generating key | err: %v", err)
-		} else {
-			delete(service.Cache.WaitingForReceiptCache, key)
-			// updating cache to delay retry until cancellation tx is mined
-			service.Cache.UpdateEntry(key, service.Cache.Data[key].Tx, time.Now().Unix())
 
-			//updating based on sender address and nonce as the txHash here would be different
-			service.Processor.Db.FinaliseTx(db.TransactionDetails{
-				Address:       fromAddress.String(),
-				Nonce:         tx.Nonce(),
-				InclusionTime: uint64(time.Now().Unix()),
-				IsCancelled:   true,
-			})
-		}
+		_ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(service.Config.WaitMinedInterval)*10*time.Second)
+
+		go service.WaitTillMined(_ctx, cancelFunc, tx, service.Config.WaitMinedInterval)
 		return &txHash, nil
 	}
 
@@ -314,11 +302,7 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 }
 
 func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.CancelFunc, tx *types.Transaction, waitMinedInterval int) {
-	key, err := s.Cache.Key(tx)
-	if err != nil {
-		utils.Logger.Debug().Msgf("WaitTillMined | error in generating key | err: %v", err)
-		return
-	}
+	key := tx.Hash().String()
 	value := s.Cache.WaitingForReceiptCache[key]
 
 	if !value {
@@ -344,8 +328,8 @@ func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.Cance
 					s.Processor.Db.FinaliseTx(db.TransactionDetails{
 						Address:       fromAddress.String(),
 						Nonce:         tx.Nonce(),
-						TxHash:        tx.Hash().String(),
 						InclusionTime: block.Time(),
+						IsCancelled:   utils.IsCancellationTransaction(tx, fromAddress),
 					})
 					return
 				}
@@ -360,12 +344,13 @@ func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.Cance
 
 			} else {
 				// return if tx is explicitely set to not check
-				return
+				cancelFunc()
 			}
 			// Wait for the next round.
 			select {
 			case <-ctx.Done():
-				// not deleting cache here as the retry mechanism does not stop with timeout
+				// deleting cache here as we have stopped waiting for tx inclusion
+				delete(s.Cache.WaitingForReceiptCache, key)
 				return
 			case <-queryTicker.C:
 			}

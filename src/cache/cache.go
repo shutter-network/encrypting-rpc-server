@@ -16,7 +16,7 @@ type TransactionInfo struct {
 type Cache struct {
 	sync.RWMutex
 	Data                   map[string]TransactionInfo
-	WaitingForReceiptCache map[string]bool
+	WaitingForReceiptCache map[string]bool //the key here should be tx hash
 	DelayFactor            int64
 }
 
