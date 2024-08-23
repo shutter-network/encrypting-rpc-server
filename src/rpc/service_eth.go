@@ -196,8 +196,15 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		metrics.CancellationTxGauge.WithLabelValues(txHash.String()).Inc()
 		utils.Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
 
-		_ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(service.Config.WaitMinedInterval)*10*time.Second)
+		service.Processor.Db.InsertNewTx(db.TransactionDetails{
+			Address:        fromAddress.String(),
+			Nonce:          tx.Nonce(),
+			TxHash:         txHash.String(),
+			SubmissionTime: time.Now().Unix(),
+			IsCancel:       true,
+		})
 
+		_ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(service.Config.WaitMinedInterval)*10*time.Second)
 		go service.WaitTillMined(_ctx, cancelFunc, tx, service.Config.WaitMinedInterval)
 		return &txHash, nil
 	}
@@ -310,10 +317,6 @@ func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.Cance
 		defer queryTicker.Stop()
 		s.Cache.WaitingForReceiptCache[key] = true
 		utils.Logger.Info().Msgf("New tx recorded to check for inclusion | txHash: %s", tx.Hash().String())
-		fromAddress, err := utils.SenderAddress(tx)
-		if err != nil {
-			return
-		}
 		for {
 			if s.Cache.WaitingForReceiptCache[key] {
 				receipt, err := s.Processor.Client.TransactionReceipt(ctx, tx.Hash())
@@ -322,16 +325,15 @@ func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.Cance
 					block, err := s.Processor.Client.BlockByHash(ctx, receipt.BlockHash)
 					if err != nil {
 						utils.Logger.Debug().Msgf("Error getting block | blockHash: %s", receipt.BlockHash.String())
-						return
+						cancelFunc()
+
 					}
 
 					s.Processor.Db.FinaliseTx(db.TransactionDetails{
-						Address:       fromAddress.String(),
-						Nonce:         tx.Nonce(),
+						TxHash:        tx.Hash().String(),
 						InclusionTime: block.Time(),
-						IsCancelled:   utils.IsCancellationTransaction(tx, fromAddress),
 					})
-					return
+					cancelFunc()
 				}
 
 				if errors.Is(err, ethereum.NotFound) {
