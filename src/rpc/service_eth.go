@@ -201,7 +201,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 			Nonce:          tx.Nonce(),
 			TxHash:         txHash.String(),
 			SubmissionTime: time.Now().Unix(),
-			IsCancel:       true,
+			IsCancellation: true,
 		})
 
 		_ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(service.Config.WaitMinedInterval)*10*time.Second)

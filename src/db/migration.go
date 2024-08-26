@@ -24,7 +24,7 @@ type TransactionDetails struct {
 	EncryptedTxHash string `gorm:"primaryKey"`
 	SubmissionTime  int64
 	InclusionTime   uint64
-	IsCancel        bool
+	IsCancellation  bool
 }
 
 func InitialMigration(dbUrl string) (*PostgresDb, error) {
