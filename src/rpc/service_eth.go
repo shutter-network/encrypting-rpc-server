@@ -195,12 +195,17 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 
 		metrics.CancellationTxGauge.WithLabelValues(txHash.String()).Inc()
 		utils.Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
-		key, err := service.Cache.Key(tx)
-		if err != nil {
-			utils.Logger.Debug().Msgf("WaitTillMined | error in generating key | err: %v", err)
-		} else {
-			service.Cache.WaitingForReceiptCache[key] = false
-		}
+
+		service.Processor.Db.InsertNewTx(db.TransactionDetails{
+			Address:        fromAddress.String(),
+			Nonce:          tx.Nonce(),
+			TxHash:         txHash.String(),
+			SubmissionTime: time.Now().Unix(),
+			IsCancellation: true,
+		})
+
+		_ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(service.Config.WaitMinedInterval)*10*time.Second)
+		go service.WaitTillMined(_ctx, cancelFunc, tx, service.Config.WaitMinedInterval)
 		return &txHash, nil
 	}
 
@@ -304,11 +309,7 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 }
 
 func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.CancelFunc, tx *types.Transaction, waitMinedInterval int) {
-	key, err := s.Cache.Key(tx)
-	if err != nil {
-		utils.Logger.Debug().Msgf("WaitTillMined | error in generating key | err: %v", err)
-		return
-	}
+	key := tx.Hash().String()
 	value := s.Cache.WaitingForReceiptCache[key]
 
 	if !value {
@@ -316,7 +317,6 @@ func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.Cance
 		defer queryTicker.Stop()
 		s.Cache.WaitingForReceiptCache[key] = true
 		utils.Logger.Info().Msgf("New tx recorded to check for inclusion | txHash: %s", tx.Hash().String())
-
 		for {
 			if s.Cache.WaitingForReceiptCache[key] {
 				receipt, err := s.Processor.Client.TransactionReceipt(ctx, tx.Hash())
@@ -325,13 +325,15 @@ func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.Cance
 					block, err := s.Processor.Client.BlockByHash(ctx, receipt.BlockHash)
 					if err != nil {
 						utils.Logger.Debug().Msgf("Error getting block | blockHash: %s", receipt.BlockHash.String())
-						return
+						cancelFunc()
+
 					}
+
 					s.Processor.Db.FinaliseTx(db.TransactionDetails{
 						TxHash:        tx.Hash().String(),
 						InclusionTime: block.Time(),
 					})
-					return
+					cancelFunc()
 				}
 
 				if errors.Is(err, ethereum.NotFound) {
@@ -343,17 +345,14 @@ func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.Cance
 				}
 
 			} else {
-				// return if tx is explicitely set to not check now
-				s.Processor.Db.FinaliseTx(db.TransactionDetails{
-					TxHash:        tx.Hash().String(),
-					InclusionTime: uint64(time.Now().Unix()),
-					IsCancelled:   true,
-				})
-				return
+				// return if tx is explicitely set to not check
+				cancelFunc()
 			}
 			// Wait for the next round.
 			select {
 			case <-ctx.Done():
+				// deleting cache here as we have stopped waiting for tx inclusion
+				delete(s.Cache.WaitingForReceiptCache, key)
 				return
 			case <-queryTicker.C:
 			}

@@ -16,7 +16,7 @@ type TransactionInfo struct {
 type Cache struct {
 	sync.RWMutex
 	Data                   map[string]TransactionInfo
-	WaitingForReceiptCache map[string]bool
+	WaitingForReceiptCache map[string]bool //the key here should be tx hash
 	DelayFactor            int64
 }
 
@@ -76,13 +76,12 @@ func (c *Cache) ProcessTxEntry(newTx *types.Transaction, currentTime int64) (Pro
 				}, nil
 			}
 
-			// new tx with higher gas -> update tx
 			utils.Logger.Debug().Msgf("A transaction already exists with a lower gas price. " +
 				"Updating transaction and delaying transaction sending.")
 			c.UpdateEntry(key, newTx, existing.CachedTime)
 			return ProcessTxEntryResp{
 				SendStatus:   false,
-				UpdateStatus: true,
+				UpdateStatus: true, // new tx with higher gas -> update tx
 			}, nil // false -> tx won't be sent
 		}
 	}
