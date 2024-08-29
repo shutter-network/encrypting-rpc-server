@@ -10,6 +10,7 @@ CREATE TABLE transaction_details (
 );
 CREATE INDEX idx_address_nonce on transaction_details (address, nonce);
 CREATE INDEX idx_tx_hash on transaction_details (tx_hash);
+CREATE INDEX idx_encrypted_tx_hash on transaction_details (encrypted_tx_hash);
 
 
 CREATE PUBLICATION mypub FOR TABLE transaction_details;
