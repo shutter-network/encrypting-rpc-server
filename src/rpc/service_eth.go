@@ -193,7 +193,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 			return nil, returnError(-32602, err)
 		}
 
-		metrics.CancellationTxGauge.WithLabelValues(txHash.String()).Inc()
+		metrics.CancellationTxGauge.Inc()
 		utils.Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
 
 		service.Processor.Db.InsertNewTx(db.TransactionDetails{
@@ -244,8 +244,8 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 	_ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(service.Config.WaitMinedInterval)*10*time.Second)
 	go service.WaitTillMined(_ctx, cancelFunc, tx, service.Config.WaitMinedInterval)
 
-	metrics.RequestedGasLimit.WithLabelValues(submitTx.Hash().String()).Observe(float64(tx.Gas()))
-	metrics.TotalRequestDuration.WithLabelValues(submitTx.Hash().String(), txHash.String()).Observe(float64(time.Since(timeBefore).Seconds()))
+	metrics.RequestedGasLimit.Observe(float64(tx.Gas()))
+	metrics.TotalRequestDuration.Observe(float64(time.Since(timeBefore).Seconds()))
 
 	return &txHash, nil
 }
@@ -303,7 +303,7 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-	metrics.EncryptionDuration.WithLabelValues(submitTx.Hash().String()).Observe(float64(encryptionDuration))
+	metrics.EncryptionDuration.Observe(float64(encryptionDuration))
 
 	return submitTx, nil
 }
