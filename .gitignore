@@ -38,3 +38,4 @@ docker/.env
 .env
 
 data/
+db-data/
