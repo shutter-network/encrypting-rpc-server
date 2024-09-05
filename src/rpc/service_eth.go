@@ -126,7 +126,6 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 						}
 						utils.Logger.Info().Msg("Transaction sent internally: " + txHash.Hex())
 					}
-
 				} else {
 					utils.Logger.Debug().Msgf("receipt retrieval failed | txHash: %s | err: %W", info.Tx.Hash().String(), err)
 					continue
