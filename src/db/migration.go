@@ -21,7 +21,7 @@ type TransactionDetails struct {
 	Address         string `gorm:"primaryKey;index:idx_address_nonce"`
 	Nonce           uint64 `gorm:"primaryKey;index:idx_address_nonce"`
 	TxHash          string `gorm:"primaryKey;index:idx_tx_hash"`
-	EncryptedTxHash string `gorm:"primaryKey"`
+	EncryptedTxHash string `gorm:"primaryKey;index:idx_encrypted_tx_hash"`
 	SubmissionTime  int64
 	InclusionTime   uint64
 	IsCancellation  bool

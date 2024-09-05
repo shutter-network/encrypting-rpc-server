@@ -221,7 +221,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 			return nil, returnError(-32602, err)
 		}
 
-		metrics.CancellationTxGauge.WithLabelValues(txHash.String()).Inc()
+		metrics.CancellationTxGauge.Inc()
 		utils.Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
 
 		statuses, err := service.Cache.ProcessTxEntry(tx, time.Now().Unix())
@@ -333,7 +333,7 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-	metrics.EncryptionDuration.WithLabelValues(submitTx.Hash().String()).Observe(float64(encryptionDuration))
+	metrics.EncryptionDuration.Observe(float64(encryptionDuration))
 
 	return submitTx, nil
 }
