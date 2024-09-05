@@ -25,7 +25,7 @@ type TransactionDetails struct {
 	SubmissionTime  int64
 	InclusionTime   uint64
 	Retries         uint64
-	IsCancelled     bool
+	IsCancellation  bool
 }
 
 func InitialMigration(dbUrl string) (*PostgresDb, error) {

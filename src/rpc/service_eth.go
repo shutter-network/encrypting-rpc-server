@@ -88,24 +88,28 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 			delete(s.Cache.Data, key)
 
 			if info.Tx != nil {
-				if s.Cache.WaitingForReceiptCache[key] {
-					utils.Logger.Debug().Msgf("Checking for tx inclusion [%s]", info.Tx.Hash().Hex())
-					receipt, err := s.Processor.Client.TransactionReceipt(ctx, info.Tx.Hash())
-					if err == nil {
-						delete(s.Cache.WaitingForReceiptCache, key)
-						block, err := s.Processor.Client.BlockByHash(ctx, receipt.BlockHash)
-						if err != nil {
-							utils.Logger.Debug().Msgf("Error getting block | blockHash: %s", receipt.BlockHash.String())
-							continue
-						}
-						s.Processor.Db.FinaliseTx(db.TransactionDetails{
-							TxHash:        info.Tx.Hash().String(),
-							InclusionTime: block.Time(),
-						})
+				utils.Logger.Debug().Msgf("Checking for tx inclusion [%s]", info.Tx.Hash().Hex())
+				receipt, err := s.Processor.Client.TransactionReceipt(ctx, info.Tx.Hash())
+				if err == nil {
+					block, err := s.Processor.Client.BlockByHash(ctx, receipt.BlockHash)
+					if err != nil {
+						utils.Logger.Debug().Msgf("Error getting block | blockHash: %s", receipt.BlockHash.String())
 						continue
 					}
+					s.Processor.Db.FinaliseTx(db.TransactionDetails{
+						TxHash:        info.Tx.Hash().String(),
+						InclusionTime: block.Time(),
+					})
+					continue
+				}
+				fromAddress, err := utils.SenderAddress(info.Tx)
+				if err != nil {
+					utils.Logger.Error().Err(err).Msg("Failed to get sender address from tx in cache")
 
-					if errors.Is(err, ethereum.NotFound) {
+				}
+
+				if errors.Is(err, ethereum.NotFound) {
+					if !utils.IsCancellationTransaction(info.Tx, fromAddress) {
 						utils.Logger.Debug().Msgf("Transaction not yet mined | re-sending | txHash: %s", info.Tx.Hash().String())
 						rawTxBytes, err := info.Tx.MarshalBinary()
 						if err != nil {
@@ -121,23 +125,13 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 							continue
 						}
 						utils.Logger.Info().Msg("Transaction sent internally: " + txHash.Hex())
-
-					} else {
-						delete(s.Cache.WaitingForReceiptCache, key)
-						utils.Logger.Debug().Msgf("receipt retrieval failed | txHash: %s | err: %W", info.Tx.Hash().String(), err)
-						continue
 					}
 
 				} else {
-					// continue if tx is explicitely set to not check from now on
-					utils.Logger.Debug().Msgf("tx is cancelled | txhash [%s]", info.Tx.Hash().Hex())
-					s.Processor.Db.FinaliseTx(db.TransactionDetails{
-						TxHash:        info.Tx.Hash().String(),
-						InclusionTime: uint64(time.Now().Unix()),
-						IsCancelled:   true,
-					})
+					utils.Logger.Debug().Msgf("receipt retrieval failed | txHash: %s | err: %W", info.Tx.Hash().String(), err)
 					continue
 				}
+
 			}
 		}
 	}
@@ -229,14 +223,22 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 
 		metrics.CancellationTxGauge.WithLabelValues(txHash.String()).Inc()
 		utils.Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
-		key, err := service.Cache.Key(tx)
-		if err != nil {
-			utils.Logger.Debug().Msgf("SendRawTransaction | error in generating key | err: %v", err)
-		} else {
 
-			// TODO: cancellation tx will not be handled correctly here
-			service.Cache.WaitingForReceiptCache[key] = false
+		statuses, err := service.Cache.ProcessTxEntry(tx, time.Now().Unix())
+		if err != nil {
+			utils.Logger.Err(err).Msg("Failed to update the cache.")
+			return nil, returnError(-32603, err)
 		}
+
+		if statuses.UpdateStatus {
+			service.Processor.Db.InsertNewTx(db.TransactionDetails{
+				Address:        fromAddress.String(),
+				Nonce:          tx.Nonce(),
+				TxHash:         txHash.String(),
+				IsCancellation: true,
+			})
+		}
+
 		return &txHash, nil
 	}
 
@@ -250,9 +252,10 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		utils.Logger.Info().Hex("Tx hash", txHash.Bytes()).Msg("Transaction delayed")
 		if statuses.UpdateStatus { // this is the same tx, just requested more than once so we do not add it to db
 			service.Processor.Db.InsertNewTx(db.TransactionDetails{
-				Address: fromAddress.String(),
-				Nonce:   tx.Nonce(),
-				TxHash:  txHash.String(),
+				Address:        fromAddress.String(),
+				Nonce:          tx.Nonce(),
+				TxHash:         txHash.String(),
+				IsCancellation: false,
 			})
 		}
 		return &txHash, nil
@@ -270,6 +273,7 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		TxHash:          txHash.String(),
 		EncryptedTxHash: submitTx.Hash().String(),
 		SubmissionTime:  time.Now().Unix(),
+		IsCancellation:  false,
 	})
 
 	metrics.RequestedGasLimit.WithLabelValues(submitTx.Hash().String()).Observe(float64(tx.Gas()))

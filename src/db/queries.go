@@ -17,7 +17,6 @@ func (db *PostgresDb) updateInclusion(txDetails TransactionDetails) error {
 			Updates(map[string]interface{}{
 				"inclusion_time": txDetails.InclusionTime,
 				"retries":        gorm.Expr("(?)", subQuery),
-				"is_cancelled":   txDetails.IsCancelled,
 			}).Error; err != nil {
 			// Return any error will rollback the transaction
 			return err
