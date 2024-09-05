@@ -96,7 +96,7 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 
 				retries, err := s.Processor.Db.GetRetries(info.Tx.Hash().String())
 				if err != nil {
-					utils.Logger.Warn().Msgf("error fetching retries for tx %s | err %w", info.Tx.Hash().String(), err)
+					utils.Logger.Warn().Msgf("error fetching retries for tx %s | err %W", info.Tx.Hash().String(), err)
 				}
 
 				if retries > int64(s.Config.MaxRetries) {
