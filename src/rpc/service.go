@@ -12,6 +12,7 @@ import (
 	"github.com/shutter-network/encrypting-rpc-server/db"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/encodeable/url"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/metricsserver"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 )
 
 type Processor struct {
@@ -40,10 +41,9 @@ type Config struct {
 
 type RPCService interface {
 	Name() string
-	NewTimeEvent(ctx context.Context, newTime int64)
 	SendRawTransaction(ctx context.Context, s string) (*common.Hash, error)
 	Init(processor Processor, config Config)
-	SendTimeEvents(ctx context.Context, delayInSeconds int)
+	Start(ctx context.Context, group service.Runner) error
 }
 
 type EthereumClient interface {

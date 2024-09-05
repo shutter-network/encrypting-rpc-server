@@ -15,9 +15,8 @@ type TransactionInfo struct {
 
 type Cache struct {
 	sync.RWMutex
-	Data                   map[string]TransactionInfo
-	WaitingForReceiptCache map[string]bool //the key here should be tx hash
-	DelayFactor            int64
+	Data        map[string]TransactionInfo
+	DelayFactor int64
 }
 
 type ProcessTxEntryResp struct {
@@ -27,9 +26,8 @@ type ProcessTxEntryResp struct {
 
 func NewCache(delayFactor int64) *Cache {
 	return &Cache{
-		Data:                   make(map[string]TransactionInfo),
-		DelayFactor:            delayFactor,
-		WaitingForReceiptCache: make(map[string]bool),
+		Data:        make(map[string]TransactionInfo),
+		DelayFactor: delayFactor,
 	}
 }
 
@@ -38,8 +36,8 @@ func (c *Cache) Key(tx *types.Transaction) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	return fmt.Sprintf("%s-%d", fromAddress.Hex(), tx.Nonce()), nil
+	isCancellation := utils.IsCancellationTransaction(tx, fromAddress)
+	return fmt.Sprintf("%s-%d-%t", fromAddress.Hex(), tx.Nonce(), isCancellation), nil
 }
 
 func (c *Cache) UpdateEntry(key string, tx *types.Transaction, cachedTime int64) {

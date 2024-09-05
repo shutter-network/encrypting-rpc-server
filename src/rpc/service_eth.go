@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/core/types"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/cache"
@@ -22,6 +21,7 @@ import (
 	"github.com/shutter-network/encrypting-rpc-server/metrics"
 	"github.com/shutter-network/encrypting-rpc-server/utils"
 	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/identitypreimage"
+	"github.com/shutter-network/rolling-shutter/rolling-shutter/medley/service"
 	"github.com/shutter-network/shutter/shlib/shcrypto"
 )
 
@@ -61,14 +61,14 @@ func (s *EthService) Name() string {
 	return "eth"
 }
 
-func (s *EthService) SendTimeEvents(ctx context.Context, delayInSeconds int) {
+func (s *EthService) SendTimeEvents(ctx context.Context, delayInSeconds int) error {
 	timer := time.NewTicker(time.Duration(delayInSeconds) * time.Second)
 
 	for {
 		select {
 		case <-ctx.Done():
 			utils.Logger.Info().Msg("Stopping because context is done.")
-			return
+			return nil
 
 		case tickTime := <-timer.C:
 			newTime := tickTime.Unix()
@@ -88,22 +88,49 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 			delete(s.Cache.Data, key)
 
 			if info.Tx != nil {
-				utils.Logger.Debug().Msgf("Sending transaction [%s]", info.Tx.Hash().Hex())
-				rawTxBytes, err := info.Tx.MarshalBinary()
+				utils.Logger.Debug().Msgf("Checking for tx inclusion [%s]", info.Tx.Hash().Hex())
+				receipt, err := s.Processor.Client.TransactionReceipt(ctx, info.Tx.Hash())
+				if err == nil {
+					block, err := s.Processor.Client.BlockByHash(ctx, receipt.BlockHash)
+					if err != nil {
+						utils.Logger.Debug().Msgf("Error getting block | blockHash: %s", receipt.BlockHash.String())
+						continue
+					}
+					s.Processor.Db.FinaliseTx(db.TransactionDetails{
+						TxHash:        info.Tx.Hash().String(),
+						InclusionTime: block.Time(),
+					})
+					continue
+				}
+				fromAddress, err := utils.SenderAddress(info.Tx)
 				if err != nil {
-					utils.Logger.Error().Err(err).Msg("Failed to marshal data")
+					utils.Logger.Error().Err(err).Msg("Failed to get sender address from tx in cache")
+
 				}
 
-				rawTx := "0x" + common.Bytes2Hex(rawTxBytes)
-				txHash, err := s.SendRawTransaction(ctx, rawTx)
+				if errors.Is(err, ethereum.NotFound) {
+					if !utils.IsCancellationTransaction(info.Tx, fromAddress) {
+						utils.Logger.Debug().Msgf("Transaction not yet mined | re-sending | txHash: %s", info.Tx.Hash().String())
+						rawTxBytes, err := info.Tx.MarshalBinary()
+						if err != nil {
+							utils.Logger.Error().Err(err).Msg("Failed to marshal data")
+							continue
+						}
+						rawTx := "0x" + common.Bytes2Hex(rawTxBytes)
 
-				if err != nil {
-					metrics.ErrorReturnedGauge.Dec()
-					utils.Logger.Error().Err(err).Msgf("Failed to send transaction.")
+						txHash, err := s.SendRawTransaction(ctx, rawTx)
+						if err != nil {
+							metrics.ErrorReturnedGauge.Dec()
+							utils.Logger.Error().Err(err).Msgf("Failed to send transaction.")
+							continue
+						}
+						utils.Logger.Info().Msg("Transaction sent internally: " + txHash.Hex())
+					}
+				} else {
+					utils.Logger.Debug().Msgf("receipt retrieval failed | txHash: %s | err: %W", info.Tx.Hash().String(), err)
 					continue
 				}
 
-				utils.Logger.Info().Msg("Transaction sent internally: " + txHash.Hex())
 			}
 		}
 	}
@@ -196,16 +223,19 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		metrics.CancellationTxGauge.Inc()
 		utils.Logger.Info().Msg("Transaction forwarded with hash: " + txHash.Hex())
 
-		service.Processor.Db.InsertNewTx(db.TransactionDetails{
-			Address:        fromAddress.String(),
-			Nonce:          tx.Nonce(),
-			TxHash:         txHash.String(),
-			SubmissionTime: time.Now().Unix(),
-			IsCancellation: true,
-		})
+		statuses, err := service.Cache.ProcessTxEntry(tx, time.Now().Unix())
+		if err != nil {
+			utils.Logger.Debug().Msgf("cancellation tx | error in generating key | err: %v", err)
+		} else if statuses.UpdateStatus {
+			service.Processor.Db.InsertNewTx(db.TransactionDetails{
+				Address:        fromAddress.String(),
+				Nonce:          tx.Nonce(),
+				TxHash:         txHash.String(),
+				IsCancellation: true,
+			})
 
-		_ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(service.Config.WaitMinedInterval)*10*time.Second)
-		go service.WaitTillMined(_ctx, cancelFunc, tx, service.Config.WaitMinedInterval)
+		}
+
 		return &txHash, nil
 	}
 
@@ -219,9 +249,10 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		utils.Logger.Info().Hex("Tx hash", txHash.Bytes()).Msg("Transaction delayed")
 		if statuses.UpdateStatus { // this is the same tx, just requested more than once so we do not add it to db
 			service.Processor.Db.InsertNewTx(db.TransactionDetails{
-				Address: fromAddress.String(),
-				Nonce:   tx.Nonce(),
-				TxHash:  txHash.String(),
+				Address:        fromAddress.String(),
+				Nonce:          tx.Nonce(),
+				TxHash:         txHash.String(),
+				IsCancellation: false,
 			})
 		}
 		return &txHash, nil
@@ -239,10 +270,8 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		TxHash:          txHash.String(),
 		EncryptedTxHash: submitTx.Hash().String(),
 		SubmissionTime:  time.Now().Unix(),
+		IsCancellation:  false,
 	})
-
-	_ctx, cancelFunc := context.WithTimeout(context.Background(), time.Duration(service.Config.WaitMinedInterval)*10*time.Second)
-	go service.WaitTillMined(_ctx, cancelFunc, tx, service.Config.WaitMinedInterval)
 
 	metrics.RequestedGasLimit.Observe(float64(tx.Gas()))
 	metrics.TotalRequestDuration.Observe(float64(time.Since(timeBefore).Seconds()))
@@ -308,69 +337,17 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 	return submitTx, nil
 }
 
-func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.CancelFunc, tx *types.Transaction, waitMinedInterval int) {
-	key := tx.Hash().String()
-	value := s.Cache.WaitingForReceiptCache[key]
-
-	if !value {
-		queryTicker := time.NewTicker(time.Duration(waitMinedInterval) * time.Second)
-		defer queryTicker.Stop()
-		s.Cache.WaitingForReceiptCache[key] = true
-		utils.Logger.Info().Msgf("New tx recorded to check for inclusion | txHash: %s", tx.Hash().String())
-		for {
-			if s.Cache.WaitingForReceiptCache[key] {
-				receipt, err := s.Processor.Client.TransactionReceipt(ctx, tx.Hash())
-				if err == nil {
-					delete(s.Cache.WaitingForReceiptCache, key)
-					block, err := s.Processor.Client.BlockByHash(ctx, receipt.BlockHash)
-					if err != nil {
-						utils.Logger.Debug().Msgf("Error getting block | blockHash: %s", receipt.BlockHash.String())
-						cancelFunc()
-
-					}
-
-					s.Processor.Db.FinaliseTx(db.TransactionDetails{
-						TxHash:        tx.Hash().String(),
-						InclusionTime: block.Time(),
-					})
-					cancelFunc()
-				}
-
-				if errors.Is(err, ethereum.NotFound) {
-					utils.Logger.Debug().Msgf("Transaction not yet mined | txHash: %s", tx.Hash().String())
-				} else {
-					delete(s.Cache.WaitingForReceiptCache, key)
-					utils.Logger.Debug().Msgf("receipt retrieval failed | txHash: %s | err: %W", tx.Hash().String(), err)
-					cancelFunc()
-				}
-
-			} else {
-				// return if tx is explicitely set to not check
-				cancelFunc()
-			}
-			// Wait for the next round.
-			select {
-			case <-ctx.Done():
-				// deleting cache here as we have stopped waiting for tx inclusion
-				delete(s.Cache.WaitingForReceiptCache, key)
-				return
-			case <-queryTicker.C:
-			}
-		}
-	}
-}
-
-func (p *Processor) MonitorBalance(ctx context.Context, delayInSeconds int) {
+func (s *EthService) monitorBalance(ctx context.Context, delayInSeconds int) error {
 	timer := time.NewTicker(time.Duration(delayInSeconds) * time.Second)
 
 	for {
 		select {
 		case <-ctx.Done():
 			utils.Logger.Info().Msg("Stopping because context is done.")
-			return
+			return ctx.Err()
 
 		case <-timer.C:
-			balance, err := p.Client.BalanceAt(ctx, *p.SigningAddress, nil)
+			balance, err := s.Processor.Client.BalanceAt(ctx, *s.Processor.SigningAddress, nil)
 			if err != nil {
 				utils.Logger.Err(err).Msg("Failed to get balance")
 				continue
@@ -391,4 +368,16 @@ func returnError(status int, msg error) *EncodingError {
 		StatusCode: status,
 		Err:        msg,
 	}
+}
+
+func (s *EthService) Start(ctx context.Context, group service.Runner) error {
+	group.Go(func() error {
+		return s.SendTimeEvents(ctx, s.Config.DelayInSeconds)
+	})
+	if s.Processor.MetricsConfig.Enabled {
+		group.Go(func() error {
+			return s.monitorBalance(ctx, s.Config.FetchBalanceDelay)
+		})
+	}
+	return nil
 }

@@ -2,15 +2,16 @@ package rpc_test
 
 import (
 	"context"
+	"math/big"
+	"testing"
+	"time"
+
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/shutter-network/encrypting-rpc-server/cache"
 	"github.com/shutter-network/encrypting-rpc-server/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/testdata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"math/big"
-	"testing"
-	"time"
 )
 
 func initTest(t *testing.T) *rpc.EthService {
