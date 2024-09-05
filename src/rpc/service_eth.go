@@ -274,8 +274,8 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 		IsCancellation:  false,
 	})
 
-	metrics.RequestedGasLimit.WithLabelValues(submitTx.Hash().String()).Observe(float64(tx.Gas()))
-	metrics.TotalRequestDuration.WithLabelValues(submitTx.Hash().String(), txHash.String()).Observe(float64(time.Since(timeBefore).Seconds()))
+	metrics.RequestedGasLimit.Observe(float64(tx.Gas()))
+	metrics.TotalRequestDuration.Observe(float64(time.Since(timeBefore).Seconds()))
 
 	return &txHash, nil
 }
