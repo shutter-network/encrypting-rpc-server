@@ -23,3 +23,10 @@ func (db *PostgresDb) updateInclusion(txDetails TransactionDetails) error {
 	}
 	return nil
 }
+
+func (db *PostgresDb) GetRetries(txHash string) (retries int64, err error) {
+	if err := db.DB.Model(TransactionDetails{}).Where("tx_hash = ?", txHash).Count(&retries).Error; err != nil {
+		return 0, err
+	}
+	return retries, nil
+}

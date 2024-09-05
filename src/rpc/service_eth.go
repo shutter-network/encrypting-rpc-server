@@ -94,6 +94,16 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 					utils.Logger.Error().Err(err).Msg("Failed to marshal data")
 				}
 
+				retries, err := s.Processor.Db.GetRetries(info.Tx.Hash().String())
+				if err != nil {
+					utils.Logger.Warn().Msgf("error fetching retries for tx %s | err %w", info.Tx.Hash().String(), err)
+				}
+
+				if retries > int64(s.Config.MaxRetries) {
+					utils.Logger.Info().Msgf("Max retries reached, skipping | tx hash = %s", info.Tx.Hash().String())
+					continue
+				}
+
 				rawTx := "0x" + common.Bytes2Hex(rawTxBytes)
 				txHash, err := s.SendRawTransaction(ctx, rawTx)
 

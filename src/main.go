@@ -44,6 +44,7 @@ var Config struct {
 	WaitMinedInterval           int    `mapstructure:"wait-mined-interval"`
 	MetricsConfig               metrics_server.MetricsConfig
 	FetchBalanceDelay           int `mapstructure:"fetch-balance-delay"`
+	MaxRetries                  int `mapstructure:"max-retries"`
 }
 
 func Cmd() *cobra.Command {
@@ -175,6 +176,14 @@ func Cmd() *cobra.Command {
 		"delay after which balance of signing address is re recorded",
 	)
 
+	cmd.PersistentFlags().IntVarP(
+		&Config.MaxRetries,
+		"max-retries",
+		"",
+		10,
+		"max numbers of retries for a tx, if that tx is not included",
+	)
+
 	return cmd
 }
 
@@ -261,6 +270,7 @@ func Start() error {
 		EncryptedGasLimit: Config.EncryptedGasLimit,
 		WaitMinedInterval: Config.WaitMinedInterval,
 		FetchBalanceDelay: Config.FetchBalanceDelay,
+		MaxRetries:        Config.MaxRetries,
 	}
 
 	service := server.NewRPCService(processor, config, dbInst)

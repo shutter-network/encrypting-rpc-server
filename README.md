@@ -34,3 +34,4 @@ There are other options you can use like:
 * For running the server with prometheus metrics enabled, use `metrics-port`, `metrics-host` and `metrics-port`
 * `wait-mined-interval` can be used to update the time delay for inclusion checks.
 * `dbUrl` it is the url of postgres database, to record transactions and encrypted transactions.
+* `max_retries` maximum number of retries which a tx can be tried for

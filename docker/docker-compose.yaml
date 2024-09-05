@@ -23,6 +23,7 @@ services:
       --fetch-balance-delay ${FETCH_BALANCE_DELAY}
       --dbUrl ${DB_URL}
       --wait-mined-interval ${WAIT_MINED_INTERVAL}
+      --max-retries ${MAX_RETRIES}
     depends_on:
       - postgres
     labels:

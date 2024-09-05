@@ -36,6 +36,7 @@ type Config struct {
 	EncryptedGasLimit uint64
 	WaitMinedInterval int
 	FetchBalanceDelay int
+	MaxRetries        int
 }
 
 type RPCService interface {
