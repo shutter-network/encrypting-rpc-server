@@ -11,6 +11,7 @@ func (db *PostgresDb) InsertNewTx(txDetails TransactionDetails) {
 	db.addTxCh <- txDetails
 }
 
+// account address and nonce are mandatory fields to update the finalised tx
 func (db *PostgresDb) FinaliseTx(receipt TransactionDetails) {
 	db.inclusionCh <- receipt
 }

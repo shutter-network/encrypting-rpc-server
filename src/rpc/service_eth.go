@@ -226,17 +226,15 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 
 		statuses, err := service.Cache.ProcessTxEntry(tx, time.Now().Unix())
 		if err != nil {
-			utils.Logger.Err(err).Msg("Failed to update the cache.")
-			return nil, returnError(-32603, err)
-		}
-
-		if statuses.UpdateStatus {
+			utils.Logger.Debug().Msgf("cancellation tx | error in generating key | err: %v", err)
+		} else if statuses.UpdateStatus {
 			service.Processor.Db.InsertNewTx(db.TransactionDetails{
 				Address:        fromAddress.String(),
 				Nonce:          tx.Nonce(),
 				TxHash:         txHash.String(),
 				IsCancellation: true,
 			})
+
 		}
 
 		return &txHash, nil
