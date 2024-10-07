@@ -84,6 +84,14 @@ func (c *Cache) ProcessTxEntry(newTx *types.Transaction, currentTime int64) (Pro
 				UpdateStatus: true, // new tx with higher gas -> update tx
 			}, nil // false -> tx won't be sent
 		}
+		utils.Logger.Debug().Msgf("Found cache entry with nil value.")
+		utils.Logger.Debug().Msgf("Adding transaction with hash [%s] to the cache at key [%s]\n", newTx.Hash(), key)
+		c.UpdateEntry(key, newTx, existing.CachedTime)
+
+		return ProcessTxEntryResp{
+			SendStatus:   false,
+			UpdateStatus: false, // This is same tx just requested once more, no need to add to db
+		}, nil // false -> tx won't be sent
 	}
 
 	// no tx sent in the last d seconds
