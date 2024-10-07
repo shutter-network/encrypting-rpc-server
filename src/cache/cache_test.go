@@ -49,7 +49,7 @@ func TestCache_UpdateEntry(t *testing.T) {
 	assert.True(t, exists, "Key should exist in cache after UpdateEntry")
 	assert.Equal(t, signedTx, entry.Tx, "Transaction should match the updated one")
 	assert.Equal(t, cachedTime, entry.CachedTime, "CachedTime should match the updated one")
-	assert.Equal(t, false, entry.TriedAgain, "CachedTime should match the updated one")
+	assert.Equal(t, false, entry.Delayed, "CachedTime should match the updated one")
 }
 
 func TestCache_ProcessTxEntry(t *testing.T) {
@@ -74,7 +74,7 @@ func TestCache_ProcessTxEntry(t *testing.T) {
 	// Verify that the transaction in the cache matches the signed transaction
 	cachedTxInfo, exists := c.Data[key]
 	assert.True(t, exists, "Expected transaction to be in the cache")
-	assert.Equal(t, false, cachedTxInfo.TriedAgain, "The tx was tried just once, so TriedAgain should be falso")
+	assert.Equal(t, false, cachedTxInfo.Delayed, "The tx was tried just once, so Delayed should be falso")
 	assert.Equal(t, signedTx, cachedTxInfo.Tx, "Cached transaction should match the updated one")
 }
 
@@ -100,7 +100,7 @@ func TestCache_ProcessTxEntryTwice_SameTx(t *testing.T) {
 	// Verify that the transaction in the cache matches the signed transaction
 	cachedTxInfo, exists := c.Data[key]
 	assert.True(t, exists, "Expected transaction to be in the cache")
-	assert.False(t, cachedTxInfo.TriedAgain, "The tx was tried just once, so TriedAgain should be falso")
+	assert.False(t, cachedTxInfo.Delayed, "The tx was tried just once, so Delayed should be falso")
 	assert.Equal(t, signedTx, cachedTxInfo.Tx, "Cached transaction should match the updated one")
 
 	sendStatus, err = c.ProcessTxEntry(signedTx, 100)
@@ -110,7 +110,7 @@ func TestCache_ProcessTxEntryTwice_SameTx(t *testing.T) {
 
 	cachedTxInfo, exists = c.Data[key]
 	assert.True(t, exists, "Expected transaction to be in the cache")
-	assert.True(t, cachedTxInfo.TriedAgain, "The tx was tried just once, so TriedAgain should be falso")
+	assert.True(t, cachedTxInfo.Delayed, "The tx was tried more than once, so Delayed should be true")
 }
 
 func TestCache_ProcessTxEntryTwice_GasPriceChange(t *testing.T) {
@@ -135,7 +135,7 @@ func TestCache_ProcessTxEntryTwice_GasPriceChange(t *testing.T) {
 	// Verify that the transaction in the cache matches the signed transaction
 	cachedTxInfo, exists := c.Data[key]
 	assert.True(t, exists, "Expected transaction to be in the cache")
-	assert.False(t, cachedTxInfo.TriedAgain, "The tx was tried just once, so TriedAgain should be falso")
+	assert.False(t, cachedTxInfo.Delayed, "The tx was tried just once, so Delayed should be falso")
 	assert.Equal(t, signedTx, cachedTxInfo.Tx, "Cached transaction should match the updated one")
 
 	_, newTx, err := testdata.TxWithGasPrice(privateKey, signedTx.Nonce(), signedTx.ChainId(), big.NewInt(3000000000))
@@ -148,7 +148,7 @@ func TestCache_ProcessTxEntryTwice_GasPriceChange(t *testing.T) {
 
 	cachedTxInfo, exists = c.Data[key]
 	assert.True(t, exists, "Expected transaction to be in the cache")
-	assert.True(t, cachedTxInfo.TriedAgain, "The tx was tried just once, so TriedAgain should be falso")
+	assert.True(t, cachedTxInfo.Delayed, "The tx was tried more than once, so Delayed should be true")
 }
 
 func TestCache_ConcurrentUpdateEntry(t *testing.T) {
