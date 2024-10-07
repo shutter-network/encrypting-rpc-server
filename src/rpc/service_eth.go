@@ -86,7 +86,7 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 			utils.Logger.Debug().Msgf("Deleting entry at key [%s]", key)
 			delete(s.Cache.Data, key)
 
-			if info.Tx != nil {
+			if info.TriedAgain {
 				utils.Logger.Debug().Msgf("Sending transaction [%s]", info.Tx.Hash().Hex())
 				rawTxBytes, err := info.Tx.MarshalBinary()
 				if err != nil {

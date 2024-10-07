@@ -115,8 +115,9 @@ func TestSendRawTransaction_Success(t *testing.T) {
 	cachedTxInfo, exists := service.Cache.Data[key]
 
 	assert.True(t, exists, "Expected transaction information to be in the cache")
+	assert.False(t, cachedTxInfo.TriedAgain, "The tx was tried only once")
 	assert.Equal(t, time.Now().Unix(), cachedTxInfo.CachedTime, "Expected sending block does not match")
-	assert.Nil(t, cachedTxInfo.Tx)
+	assertDynamicTxEquality(t, signedTx, cachedTxInfo.Tx)
 }
 
 func TestSendRawTransaction_TransactionInvalidNonce_NotSent(t *testing.T) {
@@ -175,6 +176,7 @@ func TestSendRawTransaction_SameNonce_SameGasPrice_Delayed(t *testing.T) {
 	assert.True(t, exists, "Expected transaction information to be in the cache")
 	assert.Equal(t, time.Now().Unix(), cachedTxInfo.CachedTime, "Expected sending block does not match")
 	assertDynamicTxEquality(t, cachedTxInfo.Tx, signedTx1)
+	assert.True(t, cachedTxInfo.TriedAgain, "Expected added in retry queue")
 
 	// Only first transaction gets encrypted
 	assert.Equal(t, mockProcessTransactionCallCount, 1, "Expected ProcessTransaction to be called once")
@@ -207,6 +209,7 @@ func TestSendRawTransaction_SameNonce_HigherGasPrice_Delayed(t *testing.T) {
 	assert.True(t, exists, "Expected transaction information to be in the cache")
 	assert.Equal(t, time.Now().Unix(), cachedTxInfo.CachedTime, "Expected sending block does not match")
 	assertDynamicTxEquality(t, cachedTxInfo.Tx, signedTx2)
+	assert.True(t, cachedTxInfo.TriedAgain, "Expected added in retry queue")
 
 	// Only first transaction gets encrypted
 	assert.Equal(t, mockProcessTransactionCallCount, 1, "Expected ProcessTransaction to be called once")
@@ -224,7 +227,7 @@ func TestNewTimeEvent_UpdateTxInfo(t *testing.T) {
 		t.Fatalf("Failed to create key: %v", err)
 	}
 
-	service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, CachedTime: 1}
+	service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, CachedTime: 1, TriedAgain: true}
 
 	service.NewTimeEvent(context.Background(), currentTime)
 
@@ -232,7 +235,9 @@ func TestNewTimeEvent_UpdateTxInfo(t *testing.T) {
 
 	assert.True(t, exists, "Expected transaction information to be in the cache")
 	assert.Equal(t, currentTime, info.CachedTime, "Expected cached time to be updated")
-	assert.Nil(t, info.Tx)
+	assertDynamicTxEquality(t, signedTx, info.Tx)
+	assert.False(t, info.TriedAgain, "Expected tx to be not tried again")
+	assert.Equal(t, mockProcessTransactionCallCount, 1, "Expected ProcessTransaction to be called once")
 }
 
 func TestNewTimeEvent_KeepTxInfo(t *testing.T) {
@@ -247,7 +252,7 @@ func TestNewTimeEvent_KeepTxInfo(t *testing.T) {
 		t.Fatalf("Failed to create key: %v", err)
 	}
 
-	service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, CachedTime: 4}
+	service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, CachedTime: 4, TriedAgain: true}
 
 	service.NewTimeEvent(context.Background(), currentTime)
 
@@ -256,6 +261,7 @@ func TestNewTimeEvent_KeepTxInfo(t *testing.T) {
 	assert.True(t, exists, "Expected transaction information to be in the cache")
 	assert.Equal(t, info.CachedTime, int64(4), "Expected cached time to remain unchanged")
 	assertDynamicTxEquality(t, info.Tx, signedTx)
+	assert.Equal(t, mockProcessTransactionCallCount, 0, "Expected ProcessTransaction to not be called")
 }
 
 func TestNewTimeEvent_DeleteTxInfo(t *testing.T) {
@@ -270,13 +276,14 @@ func TestNewTimeEvent_DeleteTxInfo(t *testing.T) {
 		t.Fatalf("Failed to create key: %v", err)
 	}
 
-	service.Cache.Data[key] = cache.TransactionInfo{Tx: nil, CachedTime: 3}
+	service.Cache.Data[key] = cache.TransactionInfo{Tx: signedTx, CachedTime: 3, TriedAgain: false}
 
 	service.NewTimeEvent(context.Background(), currentTime)
 
 	_, exists := service.Cache.Data[key]
 
 	assert.False(t, exists, "Expected transaction information to be deleted from the cache")
+	assert.Equal(t, mockProcessTransactionCallCount, 0, "Expected ProcessTransaction to not be called")
 }
 
 func TestSendRawTransaction_GasLimitExceedsChainLimit_Error(t *testing.T) {
