@@ -45,8 +45,8 @@ func (c *Cache) Key(tx *types.Transaction) (string, error) {
 func (c *Cache) UpdateEntry(key string, tx *types.Transaction, cachedTime int64) {
 	txInfo := TransactionInfo{Tx: tx, CachedTime: cachedTime}
 	c.Data[key] = txInfo
-	utils.Logger.Debug().Msgf("Cache entry at key [%s] updated to: Tx = [%s] and CachedTime = [%d]",
-		key, c.Data[key].Tx.Hash().Hex(), c.Data[key].CachedTime)
+	utils.Logger.Debug().Msgf("Cache entry at key [%s] updated to: CachedTime = [%d]",
+		key, c.Data[key].CachedTime)
 }
 
 func (c *Cache) ProcessTxEntry(newTx *types.Transaction, currentTime int64) (ProcessTxEntryResp, error) {
@@ -88,7 +88,7 @@ func (c *Cache) ProcessTxEntry(newTx *types.Transaction, currentTime int64) (Pro
 
 	// no tx sent in the last d seconds
 	utils.Logger.Debug().Msgf("Adding transaction with hash [%s] and time [%v] to the cache at key [%s] \n", newTx.Hash(), currentTime, key)
-	c.UpdateEntry(key, newTx, currentTime)
+	c.UpdateEntry(key, nil, currentTime)
 	return ProcessTxEntryResp{
 		SendStatus:   true,
 		UpdateStatus: true,

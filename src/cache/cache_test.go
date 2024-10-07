@@ -73,7 +73,7 @@ func TestCache_ProcessTxEntry(t *testing.T) {
 	// Verify that the transaction in the cache matches the signed transaction
 	cachedTxInfo, exists := c.Data[key]
 	assert.True(t, exists, "Expected transaction to be in the cache")
-	assert.Equal(t, signedTx, cachedTxInfo.Tx, "Cached transaction should match the updated one")
+	assert.Nil(t, cachedTxInfo.Tx)
 }
 
 func TestCache_ConcurrentUpdateEntry(t *testing.T) {
