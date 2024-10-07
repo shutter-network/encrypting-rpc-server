@@ -97,13 +97,9 @@ func assertDynamicTxEquality(t *testing.T, cachedTx *types.Transaction, signedTx
 
 // First transaction gets sent and cache gets updated
 func TestSendRawTransaction_Success(t *testing.T) {
-	service, mockDb := initTest(t)
+	service, _ := initTest(t)
 	rawTx1, signedTx, err := testdata.Tx(service.Processor.SigningKey, 1, big.NewInt(1))
 	assert.NoError(t, err, "Failed to create signed transaction")
-
-	mockDb.ExpectBegin()
-	mockDb.ExpectExec("INSERT INTO \"transaction_details\"").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 0))
-	mockDb.ExpectCommit()
 
 	// Send the transaction
 	txHash, err := service.SendRawTransaction(context.Background(), rawTx1)
