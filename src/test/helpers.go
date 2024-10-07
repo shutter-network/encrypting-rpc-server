@@ -129,7 +129,7 @@ func setupGanacheServer(ctx context.Context, t *testing.T) error {
 	return nil
 }
 
-func setupProcessor(ctx context.Context) rpc.Processor {
+func setupProcessor(ctx context.Context, t *testing.T) (rpc.Processor, sqlmock.Sqlmock) {
 
 	contractInfo, err := GetContractData()
 	if err != nil {
@@ -179,6 +179,8 @@ func setupProcessor(ctx context.Context) rpc.Processor {
 		log.Fatal().Err(err).Msg("can not get Sequencer")
 	}
 
+	mock, db := NewPostgresTestDB(t)
+
 	processor := rpc.Processor{
 		URL:                      ":8546",
 		RPCUrl:                   BackendURL,
@@ -189,8 +191,9 @@ func setupProcessor(ctx context.Context) rpc.Processor {
 		KeyBroadcastContract:     broadcastContract,
 		SequencerContract:        sequencerContract,
 		KeyperSetManagerContract: keyperSetManagerContract,
+		Db:                       db,
 	}
-	return processor
+	return processor, mock
 }
 
 func CaptureOutput(f func() error) (error, string) {
@@ -226,7 +229,7 @@ func SetupServer(ctx context.Context, t *testing.T) error {
 		return err
 	}
 
-	processor := setupProcessor(ctx)
+	processor, _ := setupProcessor(ctx, t)
 	backendUrl := &url.URL{}
 	err = backendUrl.UnmarshalText([]byte(processor.RPCUrl))
 	if err != nil {
@@ -270,5 +273,8 @@ func NewPostgresTestDB(t *testing.T) (sqlmock.Sqlmock, *db.PostgresDb) {
 	testDb, err := gorm.Open(dialector, gormConfig)
 	require.NoError(t, err)
 
-	return mock, &db.PostgresDb{DB: testDb}
+	inclusionCh := make(chan db.TransactionDetails, 10)
+	addTxCh := make(chan db.TransactionDetails, 10)
+
+	return mock, &db.PostgresDb{DB: testDb, InclusionCh: inclusionCh, AddTxCh: addTxCh}
 }

@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/core/types"
 	txtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/shutter-network/encrypting-rpc-server/cache"
@@ -87,7 +86,7 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 			utils.Logger.Debug().Msgf("Deleting entry at key [%s]", key)
 			delete(s.Cache.Data, key)
 
-			if info.Tx != nil {
+			if info.Delayed {
 				utils.Logger.Debug().Msgf("Sending transaction [%s]", info.Tx.Hash().Hex())
 				rawTxBytes, err := info.Tx.MarshalBinary()
 				if err != nil {
@@ -308,7 +307,7 @@ var DefaultProcessTransaction = func(tx *txtypes.Transaction, ctx context.Contex
 	return submitTx, nil
 }
 
-func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.CancelFunc, tx *types.Transaction, waitMinedInterval int) {
+func (s *EthService) WaitTillMined(ctx context.Context, cancelFunc context.CancelFunc, tx *txtypes.Transaction, waitMinedInterval int) {
 	key := tx.Hash().String()
 	value := s.Cache.WaitingForReceiptCache[key]
 
