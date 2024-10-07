@@ -13,8 +13,8 @@ const BufferSize = 10
 
 type PostgresDb struct {
 	DB          *gorm.DB
-	addTxCh     chan TransactionDetails
-	inclusionCh chan TransactionDetails
+	AddTxCh     chan TransactionDetails
+	InclusionCh chan TransactionDetails
 }
 
 type TransactionDetails struct {
@@ -46,5 +46,5 @@ func InitialMigration(dbUrl string) (*PostgresDb, error) {
 	inclusionCh := make(chan TransactionDetails, BufferSize)
 	addTxCh := make(chan TransactionDetails, BufferSize)
 
-	return &PostgresDb{DB: db, addTxCh: addTxCh, inclusionCh: inclusionCh}, nil
+	return &PostgresDb{DB: db, AddTxCh: addTxCh, InclusionCh: inclusionCh}, nil
 }

@@ -2,18 +2,22 @@ package rpc_test
 
 import (
 	"context"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/shutter-network/encrypting-rpc-server/cache"
-	"github.com/shutter-network/encrypting-rpc-server/rpc"
-	"github.com/shutter-network/encrypting-rpc-server/testdata"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"math/big"
 	"testing"
 	"time"
+
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/shutter-network/encrypting-rpc-server/cache"
+	"github.com/shutter-network/encrypting-rpc-server/rpc"
+	"github.com/shutter-network/encrypting-rpc-server/test"
+	"github.com/shutter-network/encrypting-rpc-server/testdata"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-func initTest(t *testing.T) *rpc.EthService {
+func initTest(t *testing.T) (*rpc.EthService, sqlmock.Sqlmock) {
 	mockClient := new(MockEthereumClient)
 	mockKeyperSetManager := new(MockKeyperSetManagerContract)
 	mockKeyBroadcast := new(MockKeyBroadcastContract)
@@ -26,6 +30,8 @@ func initTest(t *testing.T) *rpc.EthService {
 
 	config := MockConfig()
 
+	mockDb, db := test.NewPostgresTestDB(t)
+
 	service := &rpc.EthService{
 		Processor: rpc.Processor{
 			Client:                   mockClient,
@@ -34,6 +40,7 @@ func initTest(t *testing.T) *rpc.EthService {
 			KeyBroadcastContract:     mockKeyBroadcast,
 			SequencerContract:        mockSequencer,
 			KeyperSetManagerContract: mockKeyperSetManager,
+			Db:                       db,
 		},
 		Cache:              cache.NewCache(10),
 		Config:             config,
@@ -45,16 +52,27 @@ func initTest(t *testing.T) *rpc.EthService {
 	blockNumber := uint64(1)
 	accountBalance := big.NewInt(1000000000000000000)
 
+	txReciept := types.Receipt{
+		Status:    0,
+		BlockHash: common.Hash{},
+	}
+
+	block := types.NewBlock(&types.Header{
+		Time: uint64(time.Now().Unix()),
+	}, nil, nil, nil)
+
 	mockClient.On("PendingNonceAt", mock.Anything, fromAddress).Return(nonce, nil)
 	mockClient.On("ChainID", mock.Anything).Return(chainID, nil)
 	mockClient.On("BlockNumber", mock.Anything).Return(blockNumber, nil)
 	mockClient.On("NonceAt", mock.Anything, fromAddress, (*big.Int)(nil)).Return(nonce, nil)
 	mockClient.On("BalanceAt", mock.Anything, fromAddress, (*big.Int)(nil)).Return(accountBalance, nil)
+	mockClient.On("TransactionReceipt", mock.Anything, mock.Anything).Return(&txReciept, nil)
+	mockClient.On("BlockByHash", mock.Anything, mock.Anything).Return(block, nil)
 
 	// reset counter at init
 	mockProcessTransactionCallCount = 0
 
-	return service
+	return service, mockDb
 }
 
 func assertDynamicTxEquality(t *testing.T, cachedTx *types.Transaction, signedTx *types.Transaction) {
@@ -79,9 +97,13 @@ func assertDynamicTxEquality(t *testing.T, cachedTx *types.Transaction, signedTx
 
 // First transaction gets sent and cache gets updated
 func TestSendRawTransaction_Success(t *testing.T) {
-	service := initTest(t)
+	service, mockDb := initTest(t)
 	rawTx1, signedTx, err := testdata.Tx(service.Processor.SigningKey, 1, big.NewInt(1))
 	assert.NoError(t, err, "Failed to create signed transaction")
+
+	mockDb.ExpectBegin()
+	mockDb.ExpectExec("INSERT INTO \"transaction_details\"").WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 0))
+	mockDb.ExpectCommit()
 
 	// Send the transaction
 	txHash, err := service.SendRawTransaction(context.Background(), rawTx1)
@@ -98,11 +120,11 @@ func TestSendRawTransaction_Success(t *testing.T) {
 
 	assert.True(t, exists, "Expected transaction information to be in the cache")
 	assert.Equal(t, time.Now().Unix(), cachedTxInfo.CachedTime, "Expected sending block does not match")
-	assertDynamicTxEquality(t, signedTx, cachedTxInfo.Tx)
+	assert.Nil(t, cachedTxInfo.Tx)
 }
 
 func TestSendRawTransaction_TransactionInvalidNonce_NotSent(t *testing.T) {
-	service := initTest(t)
+	service, _ := initTest(t)
 
 	wrongNonce := uint64(0)
 	chainID := big.NewInt(1)
@@ -118,7 +140,7 @@ func TestSendRawTransaction_TransactionInvalidNonce_NotSent(t *testing.T) {
 }
 
 func TestSendRawTransaction_TransactionInvalid_GasCost_Higher(t *testing.T) {
-	service := initTest(t)
+	service, _ := initTest(t)
 
 	highCost := new(big.Int).Mul(big.NewInt(10), big.NewInt(1e18))
 	rawTx, _, err := testdata.TxWithGasPrice(service.Processor.SigningKey, 1, big.NewInt(1), highCost)
@@ -134,7 +156,7 @@ func TestSendRawTransaction_TransactionInvalid_GasCost_Higher(t *testing.T) {
 
 // First tx sent and resending delayed
 func TestSendRawTransaction_SameNonce_SameGasPrice_Delayed(t *testing.T) {
-	service := initTest(t)
+	service, _ := initTest(t)
 	nonce := uint64(1)
 	chainID := big.NewInt(1)
 
@@ -164,7 +186,7 @@ func TestSendRawTransaction_SameNonce_SameGasPrice_Delayed(t *testing.T) {
 
 // First transaction gets sent, second tx with higher gas price gets delayed
 func TestSendRawTransaction_SameNonce_HigherGasPrice_Delayed(t *testing.T) {
-	service := initTest(t)
+	service, _ := initTest(t)
 	nonce := uint64(1)
 	chainID := big.NewInt(1)
 
@@ -195,7 +217,7 @@ func TestSendRawTransaction_SameNonce_HigherGasPrice_Delayed(t *testing.T) {
 }
 
 func TestNewTimeEvent_UpdateTxInfo(t *testing.T) {
-	service := initTest(t)
+	service, _ := initTest(t)
 	currentTime := time.Now().Unix()
 	chainID := big.NewInt(1)
 
@@ -214,11 +236,11 @@ func TestNewTimeEvent_UpdateTxInfo(t *testing.T) {
 
 	assert.True(t, exists, "Expected transaction information to be in the cache")
 	assert.Equal(t, currentTime, info.CachedTime, "Expected cached time to be updated")
-	assertDynamicTxEquality(t, signedTx, info.Tx)
+	assert.Nil(t, info.Tx)
 }
 
 func TestNewTimeEvent_KeepTxInfo(t *testing.T) {
-	service := initTest(t)
+	service, _ := initTest(t)
 	currentTime := int64(13)
 	chainID := big.NewInt(1)
 
@@ -241,7 +263,7 @@ func TestNewTimeEvent_KeepTxInfo(t *testing.T) {
 }
 
 func TestNewTimeEvent_DeleteTxInfo(t *testing.T) {
-	service := initTest(t)
+	service, _ := initTest(t)
 	currentTime := int64(13)
 	chainID := big.NewInt(1)
 
@@ -262,7 +284,7 @@ func TestNewTimeEvent_DeleteTxInfo(t *testing.T) {
 }
 
 func TestSendRawTransaction_GasLimitExceedsChainLimit_Error(t *testing.T) {
-	service := initTest(t)
+	service, _ := initTest(t)
 	highGasLimit := service.Config.EncryptedGasLimit + 1
 	nonce := uint64(1)
 	chainID := big.NewInt(1)
@@ -282,7 +304,7 @@ func TestSendRawTransaction_GasLimitExceedsChainLimit_Error(t *testing.T) {
 }
 
 func TestSendRawTransaction_IntrinsicGas_Error(t *testing.T) {
-	service := initTest(t)
+	service, _ := initTest(t)
 	gasLimit := uint64(20000)
 	nonce := uint64(1)
 	chainID := big.NewInt(1)
@@ -298,5 +320,5 @@ func TestSendRawTransaction_IntrinsicGas_Error(t *testing.T) {
 	encodingErr, ok := err.(*rpc.EncodingError)
 	assert.True(t, ok, "Expected error of type *EncodingError")
 	assert.Equal(t, encodingErr.StatusCode, -32602, "Expected specific status code for gas limit error")
-	assert.Equal(t, encodingErr.Err.Error(), "gas limit below intrinsic gas limit")
+	assert.Equal(t, encodingErr.Err.Error(), "gas limit below the intrinsic gas limit 21000")
 }

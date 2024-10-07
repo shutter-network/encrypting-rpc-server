@@ -34,6 +34,7 @@ func MockConfig() rpc.Config {
 		HTTPListenAddress: ":8546",
 		DelayInSeconds:    10,
 		EncryptedGasLimit: 100000,
+		WaitMinedInterval: 10,
 	}
 }
 

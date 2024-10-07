@@ -8,12 +8,12 @@ import (
 )
 
 func (db *PostgresDb) InsertNewTx(txDetails TransactionDetails) {
-	db.addTxCh <- txDetails
+	db.AddTxCh <- txDetails
 }
 
 // txhash and inclusion time are mandatory fields to update the finalised tx
 func (db *PostgresDb) FinaliseTx(receipt TransactionDetails) {
-	db.inclusionCh <- receipt
+	db.InclusionCh <- receipt
 }
 
 func (db *PostgresDb) Start(ctx context.Context) {
@@ -26,20 +26,20 @@ func (db *PostgresDb) Start(ctx context.Context) {
 	for {
 
 		select {
-		case txDetails := <-db.addTxCh:
+		case txDetails := <-db.AddTxCh:
 			if err := db.DB.Create(txDetails).Error; err != nil {
 				utils.Logger.Info().Msgf("Error recording tx | txHash: %s | err: %v", txDetails.TxHash, err)
 				continue
 			}
-		case txDetails := <-db.inclusionCh:
+		case txDetails := <-db.InclusionCh:
 			if err := db.updateInclusion(txDetails); err != nil {
 				utils.Logger.Info().Msgf("Error updating inclusion time | txHash: %s | err: %v", txDetails.TxHash, err)
 				continue
 			}
 
 		case <-ctx.Done():
-			close(db.addTxCh)
-			close(db.inclusionCh)
+			close(db.AddTxCh)
+			close(db.InclusionCh)
 			return
 		}
 	}
