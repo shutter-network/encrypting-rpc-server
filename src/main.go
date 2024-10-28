@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"math/big"
 	"os"
 	"os/signal"
 	"syscall"
@@ -44,6 +45,7 @@ var Config struct {
 	WaitMinedInterval           int    `mapstructure:"wait-mined-interval"`
 	MetricsConfig               metrics_server.MetricsConfig
 	FetchBalanceDelay           int `mapstructure:"fetch-balance-delay"`
+	GasPriceMultiplier          int `mapstructure:"fetch-balance-delay"`
 }
 
 func Cmd() *cobra.Command {
@@ -175,6 +177,14 @@ func Cmd() *cobra.Command {
 		"delay after which balance of signing address is re recorded",
 	)
 
+	cmd.PersistentFlags().IntVarP(
+		&Config.GasPriceMultiplier,
+		"gas-price-multiplier",
+		"",
+		2,
+		"multiple to increase suggested gas price than inherent one",
+	)
+
 	return cmd
 }
 
@@ -261,6 +271,7 @@ func Start() error {
 		EncryptedGasLimit: Config.EncryptedGasLimit,
 		WaitMinedInterval: Config.WaitMinedInterval,
 		FetchBalanceDelay: Config.FetchBalanceDelay,
+		GasMultiplier:     big.NewInt(int64(Config.GasPriceMultiplier)),
 	}
 
 	service := server.NewRPCService(processor, config, dbInst)

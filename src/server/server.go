@@ -35,6 +35,8 @@ func (p *JSONRPCProxy) SelectHandler(method string) http.Handler {
 		return p.processor
 	case "eth_sendRawTransaction":
 		return p.processor
+	case "eth_gasPrice":
+		return p.processor
 	default:
 		return p.backend
 	}
@@ -136,7 +138,7 @@ func (srv *server) Start(ctx context.Context, runner medleyService.Runner) error
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-  
+
 	go srv.postgresDatabase.Start(ctx)
 	if srv.processor.MetricsConfig.Enabled {
 		if err := runner.StartService(srv.processor.MetricsServer); err != nil {
