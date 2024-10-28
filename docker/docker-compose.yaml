@@ -23,6 +23,7 @@ services:
       --fetch-balance-delay ${FETCH_BALANCE_DELAY}
       --dbUrl ${DB_URL}
       --wait-mined-interval ${WAIT_MINED_INTERVAL}
+      --gas-price-multiplier ${GAS_PRICE_MULTIPLIER}
     depends_on:
       - postgres
     labels:

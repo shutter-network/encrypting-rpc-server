@@ -36,6 +36,7 @@ type Config struct {
 	EncryptedGasLimit uint64
 	WaitMinedInterval int
 	FetchBalanceDelay int
+	GasMultiplier     *big.Int
 }
 
 type RPCService interface {
@@ -44,6 +45,7 @@ type RPCService interface {
 	SendRawTransaction(ctx context.Context, s string) (*common.Hash, error)
 	Init(processor Processor, config Config)
 	SendTimeEvents(ctx context.Context, delayInSeconds int)
+	GasPrice(ctx context.Context) (*big.Int, error)
 }
 
 type EthereumClient interface {
