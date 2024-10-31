@@ -12,7 +12,7 @@ services:
     logging:
       driver: loki
       options:
-        loki-url: "https://logs.metrics.shutter.network/insert/loki/api/v1/push"
+        loki-url: ${LOKI_URL}
         loki-external-labels: |
           job=rpc
     command: >
