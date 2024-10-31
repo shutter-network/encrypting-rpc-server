@@ -9,6 +9,12 @@ services:
     ports:
       - "8546:8546"
       - 4000:4000
+    logging:
+      driver: loki
+      options:
+        loki-url: ${LOKI_URL}
+        loki-external-labels: |
+          job=rpc
     command: >
       start
       --signing-key ${SIGNING_KEY}
