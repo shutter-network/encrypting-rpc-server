@@ -30,6 +30,7 @@ services:
       --dbUrl ${DB_URL}
       --wait-mined-interval ${WAIT_MINED_INTERVAL}
       --gas-price-multiplier ${GAS_PRICE_MULTIPLIER}
+      --effective-priority-fee ${EFFECTIVE_PRIORITY_FEE}
     depends_on:
       - postgres
     labels:
