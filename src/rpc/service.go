@@ -30,13 +30,14 @@ type Processor struct {
 }
 
 type Config struct {
-	BackendURL        *url.URL
-	HTTPListenAddress string
-	DelayInSeconds    int
-	EncryptedGasLimit uint64
-	WaitMinedInterval int
-	FetchBalanceDelay int
-	GasMultiplier     *big.Int
+	BackendURL           *url.URL
+	HTTPListenAddress    string
+	DelayInSeconds       int
+	EncryptedGasLimit    uint64
+	WaitMinedInterval    int
+	FetchBalanceDelay    int
+	GasMultiplier        *big.Int
+	EffectivePriorityFee uint64
 }
 
 type RPCService interface {

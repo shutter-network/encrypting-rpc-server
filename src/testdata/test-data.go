@@ -2,10 +2,11 @@ package testdata
 
 import (
 	"crypto/ecdsa"
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"math/big"
 )
 
 func GenerateKeyPair() (*ecdsa.PrivateKey, common.Address, error) {
@@ -23,17 +24,20 @@ func GenerateKeyPair() (*ecdsa.PrivateKey, common.Address, error) {
 }
 
 func Tx(privateKey *ecdsa.PrivateKey, nonce uint64, chainID *big.Int) (string, *types.Transaction, error) {
-	return TxWithGas(privateKey, nonce, chainID, big.NewInt(2000000000), 21000)
+	return TxWithGas(privateKey, nonce, chainID, big.NewInt(2000000000), 21000, big.NewInt(2000000000))
 }
 
 func TxWithGasPrice(privateKey *ecdsa.PrivateKey, nonce uint64, chainID *big.Int, gasPrice *big.Int) (string, *types.Transaction, error) {
-	return TxWithGas(privateKey, nonce, chainID, gasPrice, 21000)
+	return TxWithGas(privateKey, nonce, chainID, gasPrice, 21000, big.NewInt(2000000000))
 }
 
-func TxWithGas(privateKey *ecdsa.PrivateKey, nonce uint64, chainID *big.Int, gasPrice *big.Int, gasLimit uint64) (string, *types.Transaction, error) {
+func TxWithLowPriorityFee(privateKey *ecdsa.PrivateKey, nonce uint64, chainID *big.Int, gasPrice *big.Int) (string, *types.Transaction, error) {
+	return TxWithGas(privateKey, nonce, chainID, gasPrice, 21000, big.NewInt(0))
+}
+
+func TxWithGas(privateKey *ecdsa.PrivateKey, nonce uint64, chainID *big.Int, gasPrice *big.Int, gasLimit uint64, maxPriorityFeePerGas *big.Int) (string, *types.Transaction, error) {
 	toAddress := common.HexToAddress("0xC0058BdcC93EaA1afd468f06A26394E2d80c8f01")
 	value := big.NewInt(120000000000) // in wei (0.12 eth)
-	maxPriorityFeePerGas := big.NewInt(2000000000)
 
 	tx := types.NewTx(&types.DynamicFeeTx{
 		ChainID:   chainID,

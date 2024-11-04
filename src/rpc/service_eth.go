@@ -185,6 +185,11 @@ func (service *EthService) SendRawTransaction(ctx context.Context, s string) (*c
 			"(max gas limit allowed per shutterized block)"))
 	}
 
+	if tx.GasTipCap().Uint64() < service.Config.EffectivePriorityFee {
+		return nil, returnError(-32602, errors.New("priority fees too low "+
+			""+tx.GasTipCap().String()))
+	}
+
 	if utils.IsCancellationTransaction(tx, fromAddress) {
 		utils.Logger.Info().Msg("Detected cancellation transaction, forwarding to backend")
 

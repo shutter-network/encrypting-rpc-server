@@ -44,8 +44,9 @@ var Config struct {
 	DbUrl                       string `mapstructure:"dburl"`
 	WaitMinedInterval           int    `mapstructure:"wait-mined-interval"`
 	MetricsConfig               metrics_server.MetricsConfig
-	FetchBalanceDelay           int `mapstructure:"fetch-balance-delay"`
-	GasPriceMultiplier          int `mapstructure:"fetch-balance-delay"`
+	FetchBalanceDelay           int    `mapstructure:"fetch-balance-delay"`
+	GasPriceMultiplier          int    `mapstructure:"fetch-balance-delay"`
+	EffectivePriorityFee        uint64 `mapstructure:"effective-priority-fee"`
 }
 
 func Cmd() *cobra.Command {
@@ -185,6 +186,14 @@ func Cmd() *cobra.Command {
 		"multiple to increase suggested gas price than inherent one",
 	)
 
+	cmd.PersistentFlags().Uint64VarP(
+		&Config.EffectivePriorityFee,
+		"effective-priority-fee",
+		"",
+		1000000000,
+		"effective priority fee",
+	)
+
 	return cmd
 }
 
@@ -265,13 +274,14 @@ func Start() error {
 	}
 
 	config := rpc.Config{
-		BackendURL:        backendURL,
-		HTTPListenAddress: Config.HTTPListenAddress,
-		DelayInSeconds:    Config.DelayInSeconds,
-		EncryptedGasLimit: Config.EncryptedGasLimit,
-		WaitMinedInterval: Config.WaitMinedInterval,
-		FetchBalanceDelay: Config.FetchBalanceDelay,
-		GasMultiplier:     big.NewInt(int64(Config.GasPriceMultiplier)),
+		BackendURL:           backendURL,
+		HTTPListenAddress:    Config.HTTPListenAddress,
+		DelayInSeconds:       Config.DelayInSeconds,
+		EncryptedGasLimit:    Config.EncryptedGasLimit,
+		WaitMinedInterval:    Config.WaitMinedInterval,
+		FetchBalanceDelay:    Config.FetchBalanceDelay,
+		GasMultiplier:        big.NewInt(int64(Config.GasPriceMultiplier)),
+		EffectivePriorityFee: Config.EffectivePriorityFee,
 	}
 
 	service := server.NewRPCService(processor, config, dbInst)

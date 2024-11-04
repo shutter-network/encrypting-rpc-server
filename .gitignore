@@ -39,3 +39,4 @@ docker/.env
 
 data/
 db-data/
+.envrc
