@@ -30,11 +30,12 @@ type MockSequencerContract struct {
 
 func MockConfig() rpc.Config {
 	return rpc.Config{
-		BackendURL:        &url.URL{},
-		HTTPListenAddress: ":8546",
-		DelayInSeconds:    10,
-		EncryptedGasLimit: 100000,
-		WaitMinedInterval: 10,
+		BackendURL:           &url.URL{},
+		HTTPListenAddress:    ":8546",
+		DelayInSeconds:       10,
+		EncryptedGasLimit:    100000,
+		WaitMinedInterval:    10,
+		EffectivePriorityFee: 1000000000,
 	}
 }
 

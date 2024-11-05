@@ -292,7 +292,7 @@ func TestSendRawTransaction_GasLimitExceedsChainLimit_Error(t *testing.T) {
 	nonce := uint64(1)
 	chainID := big.NewInt(1)
 
-	rawTx, _, err := testdata.TxWithGas(service.Processor.SigningKey, nonce, chainID, big.NewInt(2000000000), highGasLimit)
+	rawTx, _, err := testdata.TxWithGas(service.Processor.SigningKey, nonce, chainID, big.NewInt(2000000000), highGasLimit, big.NewInt(2000000000))
 	assert.NoError(t, err, "Failed to create signed transaction")
 
 	// Send the transaction
@@ -312,7 +312,7 @@ func TestSendRawTransaction_IntrinsicGas_Error(t *testing.T) {
 	nonce := uint64(1)
 	chainID := big.NewInt(1)
 
-	rawTx, _, err := testdata.TxWithGas(service.Processor.SigningKey, nonce, chainID, big.NewInt(2000000000), gasLimit)
+	rawTx, _, err := testdata.TxWithGas(service.Processor.SigningKey, nonce, chainID, big.NewInt(2000000000), gasLimit, big.NewInt(2000000000))
 	assert.NoError(t, err, "Failed to create signed transaction")
 
 	// Send the transaction
@@ -324,4 +324,22 @@ func TestSendRawTransaction_IntrinsicGas_Error(t *testing.T) {
 	assert.True(t, ok, "Expected error of type *EncodingError")
 	assert.Equal(t, encodingErr.StatusCode, -32602, "Expected specific status code for gas limit error")
 	assert.Equal(t, encodingErr.Err.Error(), "gas limit below the intrinsic gas limit 21000")
+}
+
+func TestSendRawTransaction_PriorityGas_Error(t *testing.T) {
+	service, _ := initTest(t)
+	gasLimit := uint64(30000)
+	nonce := uint64(1)
+	chainID := big.NewInt(1)
+
+	rawTx, _, err := testdata.TxWithGas(service.Processor.SigningKey, nonce, chainID, big.NewInt(2000000000), gasLimit, big.NewInt(0))
+	assert.NoError(t, err, "Failed to create signed transaction")
+
+	txHash, err := service.SendRawTransaction(context.Background(), rawTx)
+	assert.Error(t, err, "Failed to send raw transaction")
+	assert.Nil(t, txHash)
+
+	encodingErr, ok := err.(*rpc.EncodingError)
+	assert.True(t, ok, "Expected error of type *EncodingError")
+	assert.Equal(t, encodingErr.StatusCode, -32602, "Expected specific status code for invalid priority fee")
 }
