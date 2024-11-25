@@ -2,7 +2,7 @@ name: encrypting_rpc
 services:
   rpc:
     image: shutter-network/encrypting-rpc
-    restart: always
+    restart: unless-stopped
     build:
       context: ../
     env_file: .env
@@ -92,5 +92,6 @@ services:
   node_exporter:
     image: prom/node-exporter:latest
     container_name: my_node_exporter
+    restart: unless-stopped
     ports:
       - "9100:9100"
