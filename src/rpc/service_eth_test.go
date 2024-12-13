@@ -95,6 +95,20 @@ func assertDynamicTxEquality(t *testing.T, cachedTx *types.Transaction, signedTx
 
 }
 
+func TestGasPrice(t *testing.T) {
+	service, _ := initTest(t)
+	expectedGasPrice := big.NewInt(20000000000)
+	expectedHexGasPrice := "0x9502f9000"
+
+	service.Processor.Client.(*MockEthereumClient).On("SuggestGasPrice", mock.Anything).Return(expectedGasPrice, nil)
+
+	actualGasPrice, err := service.GasPrice(context.Background())
+
+	assert.NoError(t, err, "GasPrice should not return an error")
+	assert.Equal(t, expectedHexGasPrice, actualGasPrice, "GasPrice should return the expected hex value")
+	service.Processor.Client.(*MockEthereumClient).AssertCalled(t, "SuggestGasPrice", mock.Anything)
+}
+
 // First transaction gets sent and cache gets updated
 func TestSendRawTransaction_Success(t *testing.T) {
 	service, _ := initTest(t)

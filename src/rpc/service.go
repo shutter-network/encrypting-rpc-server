@@ -46,7 +46,7 @@ type RPCService interface {
 	SendRawTransaction(ctx context.Context, s string) (*common.Hash, error)
 	Init(processor Processor, config Config)
 	SendTimeEvents(ctx context.Context, delayInSeconds int)
-	GasPrice(ctx context.Context) (*big.Int, error)
+	GasPrice(ctx context.Context) (string, error)
 }
 
 type EthereumClient interface {

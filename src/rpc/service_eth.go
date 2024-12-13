@@ -108,12 +108,13 @@ func (s *EthService) NewTimeEvent(ctx context.Context, newTime int64) {
 	}
 }
 
-func (srv *EthService) GasPrice(ctx context.Context) (*big.Int, error) {
+func (srv *EthService) GasPrice(ctx context.Context) (string, error) {
 	gasPrice, err := srv.Processor.Client.SuggestGasPrice(ctx)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return new(big.Int).Mul(gasPrice, srv.Config.GasMultiplier), nil
+	adjustedGasPrice := new(big.Int).Mul(gasPrice, srv.Config.GasMultiplier)
+	return "0x" + adjustedGasPrice.Text(16), nil
 }
 
 func (service *EthService) SendTransaction(ctx context.Context, tx *txtypes.Transaction) (*common.Hash, error) {
