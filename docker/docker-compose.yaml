@@ -38,9 +38,6 @@ services:
       caddy.@browser: "method GET"
       caddy.redir: "@browser https://blog.shutter.network/shutterized-gnosis-chain-is-now-live/"
       caddy.reverse_proxy: "{{ upstreams 8546 }}"
-      caddy.header.Access-Control-Allow-Origin: "*"
-      caddy.header.Access-Control-Allow-Methods: "GET, POST, OPTIONS"
-      caddy.header.Access-Control-Allow-Headers: "Content-Type, Authorization"
 
   caddy:
     image: lucaslorentz/caddy-docker-proxy:latest

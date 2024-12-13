@@ -109,16 +109,32 @@ func (srv *server) rpcHandler(ctx context.Context) (http.Handler, error) {
 	}
 
 	p := &JSONRPCProxy{
-		backend:   NewReverseProxy(srv.config.BackendURL),
+		backend:   NewReverseProxy(srv.config.BackendURL.URL),
 		processor: rpcServer,
 	}
 	return p, nil
+}
+
+func CORSHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (srv *server) setupRouter(ctx context.Context) (*chi.Mux, error) {
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
+	router.Use(CORSHandler)
 	handler, err := srv.rpcHandler(ctx)
 	if err != nil {
 		return nil, err
