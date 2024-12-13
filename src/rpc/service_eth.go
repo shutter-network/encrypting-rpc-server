@@ -114,7 +114,7 @@ func (srv *EthService) GasPrice(ctx context.Context) (string, error) {
 		return "", err
 	}
 	adjustedGasPrice := new(big.Int).Mul(gasPrice, srv.Config.GasMultiplier)
-	return "0x" + adjustedGasPrice.Text(16), nil
+	return hexutil.EncodeBig(adjustedGasPrice), nil
 }
 
 func (service *EthService) SendTransaction(ctx context.Context, tx *txtypes.Transaction) (*common.Hash, error) {
