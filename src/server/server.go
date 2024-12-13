@@ -109,7 +109,7 @@ func (srv *server) rpcHandler(ctx context.Context) (http.Handler, error) {
 	}
 
 	p := &JSONRPCProxy{
-		backend:   NewReverseProxy(srv.config.BackendURL),
+		backend:   NewReverseProxy(srv.config.BackendURL.URL),
 		processor: rpcServer,
 	}
 	return p, nil
