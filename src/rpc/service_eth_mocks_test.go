@@ -35,6 +35,8 @@ func MockConfig() rpc.Config {
 		DelayInSeconds:       10,
 		EncryptedGasLimit:    100000,
 		WaitMinedInterval:    10,
+		FetchBalanceDelay:    120,
+		GasMultiplier:        big.NewInt(2),
 		EffectivePriorityFee: 1000000000,
 	}
 }
