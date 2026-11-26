@@ -1,3 +1,8 @@
+> [!WARNING]
+> **This repository is no longer maintained.**
+> The Shutter encrypted mempool on Gnosis Chain was retired on 25 November 2026. The public encrypting RPC endpoint has been shut down. Use a standard Gnosis Chain RPC endpoint.
+> The code remains available for reference.
+
 # Encrypting RPC Server
 
 This server is using Gnosis Chain Configuration and Shutter Network Mempool encryption to protect your transactions against MEV.
